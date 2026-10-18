@@ -20,3 +20,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - lib/scoring must stay pure and deterministic.
 - PDF output: single column, no tables, no icons, embedded static fonts only.
 - Show a plan first. Run `npm test` before saying done. Touch only the folders named in the task.
+# Operating model
+- Read docs/ROLES.md and docs/BLUEPRINT.md before starting any task.
+- State your role at the start of every task and stay inside it.
+- Work from a ticket in docs/tickets/. If none exists, ask for one; do not invent scope.
+- One ticket = one branch. Never commit directly to master.
+- Never review or approve your own work.
+- If a task needs a file outside the ticket's allowed list, stop and ask.
