@@ -90,7 +90,7 @@ To preserve focus and ensure delivery, the following features are **explicitly e
 - **Zero Invented Digits:** 0 invented digits in bullet optimization (enforced by automated server-side regex guards); verifying unauthorized qualitative facts remains a manual human review item.
 - **Security & Multi-Tenant Isolation:** 0 cross-tenant data leaks; 100% pass rate on automated Supabase Row Level Security (RLS) test suite.
 - **Free-to-Pass Conversion Hypothesis:** Observe whether 8% to 12% of free-tier users convert to the 30-day paid pass ($19).
-- **Unit Economics / AI Cost:** Target average AI API cost per active user remaining under $3.80 (less than 20% of the $19 pass price).
+- **Unit Economics / AI Cost:** Target average AI API cost per active user under $3.80 (less than 20% of the $19 pass price). Note: all AI cost assumptions are preliminary engineering estimates, to be validated and replaced by empirical data from the `usage_events` table. Neither provider pricing nor model performance is assumed as fact; candidate model selection and operating costs are TBD pending evaluation (T-016).
 
 ---
 
@@ -110,3 +110,4 @@ The following items are unresolved business and infrastructure assumptions that 
 8. **Paid Gemini API Tier Data Terms:** Confirmation that the active paid tier of Google Gemini API guarantees user prompts and resume payloads are excluded from model training datasets.
 9. **Autosave Debounce Parameter:** Confirmation of the client-side debounced autosave interval (assumed 1000ms).
 10. **Privacy Policy, Data Retention, & GDPR:** Who will author the customer-facing privacy policy, terms of service, and data processing agreement (DPA) regarding user resume deletion policies and sub-processors?
+11. **Fallback Provider and Open Model Selection:** Which hosted inference provider (OpenAI-compatible endpoint) and open-weights model family will serve as the secondary failover backend? Candidates are TBD pending results from the evaluation harness (T-016). Model quality and provider prices must not be asserted as facts before evaluation.
