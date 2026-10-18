@@ -1,1 +1,3 @@
 2026-10-18: AI layer uses a provider interface with Gemini primary and an OpenAI-compatible open-model fallback. Fallback adapter added behind the seam, enabled per task only after eval gate. No self-hosting for MVP. Reason: cost and availability; privacy gates apply to every provider.
+2026-10-18: Blueprint weeks 0-3 rescheduled to 6-8 calendar weeks (118-144h est.) per ticket breakdown. Reason: DB triggers, proxy.ts, split editor, lint, parity tests.
+

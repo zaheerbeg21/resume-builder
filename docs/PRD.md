@@ -56,7 +56,7 @@ Existing resume builders in the consumer market exhibit four recurring points of
    - *Classic:* Traditional serif style using embedded static serif font (Source Serif 4 or Noto Serif).
 6. **Unified Live Preview:** Browser preview rendered by the identical React-PDF engine used for server-side PDF exports.
 7. **ATS Export Pipeline & Lint:** PDF export with automated pre-flight ATS lint and parse-back check (`pdf-parse` v2).
-8. **Job Description Keyword Matching:** Paste JD → LLM keyword extraction (via provider router) → deterministic, client/server TypeScript Keyword Match Score with line-by-line evidence.
+8. **Job Description Keyword Matching:** Paste JD → Gemini keyword extraction → deterministic, client/server TypeScript Keyword Match Score with line-by-line evidence.
 9. **Fact-Constrained Bullet Improver:** 3 rewrite variants per bullet (conservative, metric-focused, leadership/scope-focused); strict server-side digit guards prevent invented numbers; unresolved bracketed placeholders block export.
 10. **Monetization & Free Tier:** Single $19 pass for 30 days of unlimited exports and higher AI quota via Stripe Checkout; free tier includes resume building, previewing, scoring, 5 AI calls per day, and 1 clean PDF export.
 
@@ -90,7 +90,7 @@ To preserve focus and ensure delivery, the following features are **explicitly e
 - **Zero Invented Digits:** 0 invented digits in bullet optimization (enforced by automated server-side regex guards); verifying unauthorized qualitative facts remains a manual human review item.
 - **Security & Multi-Tenant Isolation:** 0 cross-tenant data leaks; 100% pass rate on automated Supabase Row Level Security (RLS) test suite.
 - **Free-to-Pass Conversion Hypothesis:** Observe whether 8% to 12% of free-tier users convert to the 30-day paid pass ($19).
-- **Unit Economics / AI Cost:** Target average AI API cost per active user remaining under $3.80 (less than 20% of the $19 pass price). Note: all AI cost assumptions are preliminary engineering estimates to be validated and replaced by empirical data captured in the `usage_events` telemetry table. Neither provider pricing nor model performance characteristics are assumed as fixed facts; candidate model selection and operating costs are marked TBD pending evaluation (T-016).
+- **Unit Economics / AI Cost:** Target average AI API cost per active user remaining under $3.80 (less than 20% of the $19 pass price).
 
 ---
 
@@ -107,7 +107,6 @@ The following items are unresolved business and infrastructure assumptions that 
 5. **Payment Gateway Availability:** Is Stripe available in the founder's business entity country? If not, should the architecture pivot to an authorized Merchant of Record (Paddle or Lemon Squeezy) to handle global sales tax and VAT?
 6. **Static Serif Font Selection:** Which specific open-source static TTF serif font will be standardized for the Classic template (Source Serif 4 vs. Noto Serif), and has the license been formally verified?
 7. **Fair-Use AI Quota Limits:** What is the precise numerical fair-use ceiling for AI calls on the 30-day pass (e.g., 300 calls per pass) before throttling or soft caps take effect?
-8. **Provider Commercial Data Terms & Privacy Gates:** Confirmation that every external LLM provider integrated behind the AI provider seam (primary Gemini, secondary OpenAI-compatible host) operates under paid commercial terms explicitly guaranteeing user prompts and resume payloads are excluded from model training datasets, with zero-retention policies.
+8. **Paid Gemini API Tier Data Terms:** Confirmation that the active paid tier of Google Gemini API guarantees user prompts and resume payloads are excluded from model training datasets.
 9. **Autosave Debounce Parameter:** Confirmation of the client-side debounced autosave interval (assumed 1000ms).
 10. **Privacy Policy, Data Retention, & GDPR:** Who will author the customer-facing privacy policy, terms of service, and data processing agreement (DPA) regarding user resume deletion policies and sub-processors?
-11. **Fallback Provider & Open Model Selection:** Which hosted inference provider (OpenAI-compatible endpoint) and open-weights model family will serve as the secondary failover backend? Candidate models and host providers are strictly TBD pending empirical benchmark results from the evaluation harness (T-016). Specific model quality and provider price points must not be asserted as facts prior to evaluation.
