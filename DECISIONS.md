@@ -1,0 +1,1 @@
+2026-10-18: AI layer uses a provider interface with Gemini primary and an OpenAI-compatible open-model fallback. Fallback adapter added behind the seam, enabled per task only after eval gate. No self-hosting for MVP. Reason: cost and availability; privacy gates apply to every provider.

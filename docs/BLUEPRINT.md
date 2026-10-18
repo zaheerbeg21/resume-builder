@@ -60,8 +60,8 @@ This table is built from general knowledge of these products and common user com
 
 | v1 | v2 |
 |---|---|
-| gemini-1.5-pro hardcoded | Model names live in env vars (`GEMINI_MODEL_FAST`, `GEMINI_MODEL_QUALITY`). Check Google's current model list at build time. |
-| Legacy `@google/generative-ai` SDK | `@google/genai` |
+| gemini-1.5-pro hardcoded | Model names live in env vars (`AI_PRIMARY_MODEL`, `AI_FALLBACK_MODEL`). Models are marked TBD pending evaluation harness (T-016). |
+| Single proprietary provider lock-in | Provider-neutral AI seam (`LlmProvider` interface) with primary Gemini adapter (`@google/genai`) and secondary OpenAI-compatible adapter (`openai`) for open models behind an evaluation gate (T-015, T-016). Fake adapter for CI. |
 | LLM produces a 0–100 ATS score | LLM only extracts keywords; score is computed in plain TypeScript |
 | Puppeteer and React-PDF both | React-PDF only |
 | HTML preview, React-PDF export | React-PDF renders both |
@@ -74,11 +74,12 @@ This table is built from general knowledge of these products and common user com
 
 - **App:** Next.js (App Router, TypeScript strict), Tailwind, shadcn/ui, Zustand, Zod.
 - **Data and auth:** Supabase Postgres with RLS, Supabase Auth, Storage (private bucket, short-lived signed URLs, auto-delete uploads).
-- **AI:** `@google/genai` with JSON-schema structured output, temperature 0 for extraction and parsing.
-- **PDF:** `@react-pdf/renderer` for preview and export; `pdf-parse` (server) for the parse-back check.
+- **AI:** Provider-neutral AI layer (`lib/ai/`) via an `LlmProvider` interface with primary Gemini adapter (`@google/genai`), secondary OpenAI-compatible adapter (`openai`), and a mock/fake provider for deterministic CI testing without network calls. Controlled by a failover router (fail over on timeout, network error, 429, 5xx; retry once on Zod/digit-guard failure then fail over once, max 2 attempts; no failover on content policy refusals or 401/403) and an in-memory circuit breaker (opens after 5 failures in 60s for 5 minutes). Model names are configured via environment variables and marked TBD pending evaluation. Temperature 0 for parsing and extraction with JSON-schema structured output.
+- **Resume Import:** Strictly text-only extraction via `pdf-parse` v2 (no OCR, no binary model processing in MVP) followed by mandatory review screen.
+- **PDF:** `@react-pdf/renderer` for preview and export; `pdf-parse` v2 (server) for the parse-back check.
 - **Payments:** Stripe Checkout for the one-time pass. Confirm Stripe is available for your business country first; if not, evaluate a merchant-of-record provider (Paddle, Lemon Squeezy), which also handles global sales tax.
 - **Rate limiting:** Upstash Redis (or Supabase-based counters) plus Cloudflare Turnstile on anonymous routes.
-- **Observability:** Sentry, PostHog (events), a `usage_events` table for per-user AI cost.
+- **Observability:** Sentry, PostHog (events), a `usage_events` table for per-user AI cost and latency telemetry.
 - **Hosting:** Vercel. Keep AI routes on the Node runtime with a sane timeout.
 
 ### Request flow
@@ -87,8 +88,8 @@ This table is built from general knowledge of these products and common user com
 Browser (Zustand resume state)
   ├─ edit → autosave (debounced) → Supabase (RLS)
   ├─ preview → React-PDF in browser (same templates as export)
-  ├─ POST /api/ai/* → auth → quota → rate limit → Gemini → Zod validate → response + usage_events
-  ├─ POST /api/jd/analyze → cache by hash(JD + prompt_version) → Gemini extract → keywords
+  ├─ POST /api/ai/* → auth → quota (per user request) → rate limit → AI router (primary/fallback) → Zod validate → response + usage_events
+  ├─ POST /api/jd/analyze → cache by hash(JD + prompt_version + provider + model) → AI router extract → keywords
   ├─ score (pure TS, runs in browser or server) → breakdown with evidence
   └─ POST /api/pdf/export → entitlement check → render → pdf-parse lint → signed download
 Stripe → /api/webhooks/stripe → verify signature → idempotency table → entitlements
@@ -141,10 +142,13 @@ create table usage_events (
   id bigserial primary key,
   user_id uuid references profiles on delete set null,
   route text not null,
-  model text,
+  provider text not null,              -- 'gemini' | 'openai-compatible' | 'fake'
+  model text not null,                 -- active model identifier (TBD pending evaluation)
+  failed_over_from text,               -- null if primary succeeded, else initial provider name
+  latency_ms int,                      -- round-trip execution latency in ms
   input_tokens int,
   output_tokens int,
-  est_cost_usd numeric(10,6),
+  est_cost_usd numeric(10,6),          -- preliminary estimate replaced/reconciled by telemetry
   created_at timestamptz default now()
 );
 
@@ -265,7 +269,7 @@ export const JdAnalysisSchema = z.object({
 });
 ```
 
-Cache by `sha256(normalized JD + PROMPT_VERSION)`. A repeated JD costs nothing and returns an identical keyword list, which is what makes the score reproducible.
+Cache by `sha256(normalized JD + PROMPT_VERSION + provider + model)`. Storing provider and model in the cache key prevents cross-provider cache poisoning, ensures scoring determinism across model changes, and eliminates redundant external model calls.
 
 ### 6.3 Bullet improver (`/api/ai/bullet-optimize`)
 
@@ -462,13 +466,14 @@ export function scoreResume(resume: Resume, jd: JdAnalysis, formatScore01: numbe
 
 ## 10. Security, privacy and cost control
 
-- **Rate limits:** per user and per IP on every `/api/ai/*` and `/api/jd/*` route. Anonymous free checker: Turnstile plus 3 runs per IP per day, JD analysis only (cheapest model).
-- **Quotas:** enforced from `usage_events`; hard monthly spend alarm on the Gemini project.
-- **Model tier:** use the paid Gemini API tier for production so user content is not used for training (confirm in Google's current terms before launch).
-- **PII:** private storage bucket, signed URLs, uploads deleted after parsing, a Delete my account and data button that cascades, a privacy policy stating retention. If you take EU or UK users, add GDPR basics (lawful basis, DPA with sub-processors, data export).
-- **Input limits:** max file 5 MB, max 3 pages parsed, max JD 12,000 characters.
-- **Secrets:** only in Vercel env vars; never in the client bundle; service-role key used only in server routes.
-- **Per-call cost log:** write a `usage_events` row on every AI call from day one.
+- **Rate limits:** per user and per IP on every `/api/ai/*` and `/api/jd/*` route. Anonymous free checker: Turnstile plus 3 runs per IP per day, JD analysis only (fast/cheap model).
+- **Quotas:** counted per user request (not per failover attempt; failover attempts are internal retries and never double-count against user quota), enforced from `usage_events`. Hard monthly spend alarms configured across all active AI provider consoles.
+- **Model tiers and processor terms:** every AI provider (primary Gemini, secondary OpenAI-compatible provider) must be an explicitly named sub-processor under commercial/paid enterprise terms with confirmed no-training and zero-data-retention guarantees. Never route user resumes to free or unconfirmed tiers where prompts may train public models.
+- **Circuit breaker & failover controls:** circuit breaker trips after 5 failures in 60s for 5 minutes to prevent cascading outages and billing spikes. No failover on auth errors (401/403) or content-policy refusals.
+- **PII:** private storage bucket, signed URLs, uploads deleted after parsing, a Delete my account and data button that cascades, a privacy policy stating retention and naming all AI processors. If you take EU or UK users, add GDPR basics (lawful basis, DPA with sub-processors, data export).
+- **Input limits:** max file 5 MB, max 3 pages parsed, max JD 12,000 characters. Text-only import extraction via `pdf-parse` v2 (no raw PDF binaries sent to external AI providers).
+- **Secrets:** only in Vercel env vars (`GEMINI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, `OPENAI_COMPATIBLE_BASE_URL`); never in the client bundle; service-role key used only in server routes.
+- **Per-call cost and latency telemetry:** write a `usage_events` row on every AI invocation from day one, tracking `provider`, `model`, `failed_over_from`, and `latency_ms`.
 
 ## 11. Repository structure
 
@@ -490,14 +495,14 @@ resume-builder/
 │       └── webhooks/stripe/route.ts
 ├── components/{editor, preview, match-panel, ui}
 ├── lib/
-│   ├── ai/{client.ts, prompts.ts, schemas.ts, guards.ts}
+│   ├── ai/{client.ts, prompts.ts, schemas.ts, guards.ts, provider.ts, router.ts, circuit-breaker.ts, adapters/}
 │   ├── scoring/{match.ts, match.test.ts, format-lint.ts}
 │   ├── pdf/{fonts.ts, templates/, lint.ts}
 │   ├── billing/{stripe.ts, entitlements.ts}
 │   ├── limits/{ratelimit.ts, quota.ts}
 │   └── db/{client.ts, types.ts}
 ├── supabase/migrations/
-├── tests/{fixtures/resumes, fixtures/jds, rls.test.ts, pdf-roundtrip.test.ts}
+├── tests/{fixtures/resumes, fixtures/jds, fixtures/bullets, rls.test.ts, pdf-roundtrip.test.ts, ai-provider.test.ts, eval/}
 └── types/resume.ts
 ```
 
