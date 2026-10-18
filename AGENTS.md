@@ -27,3 +27,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - One ticket = one branch. Never commit directly to master.
 - Never review or approve your own work.
 - If a task needs a file outside the ticket's allowed list, stop and ask.
+- Run commands synchronously. Never start background tasks, timers, or schedules unless explicitly asked. Never run git commit unless explicitly asked.
