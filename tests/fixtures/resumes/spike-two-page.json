@@ -1,0 +1,131 @@
+{
+  "basics": {
+    "fullName": "Marcus Vance",
+    "headline": "Staff Distributed Systems Engineer & Certified Cloud Architect",
+    "email": "marcus.vance@example.com",
+    "phone": "+1 (555) 876-5432",
+    "location": "Seattle, WA",
+    "links": [
+      {
+        "label": "LinkedIn",
+        "url": "https://linkedin.com/in/marcusvance"
+      },
+      {
+        "label": "GitHub",
+        "url": "https://github.com/marcusvance"
+      }
+    ]
+  },
+  "summary": "Distinguished infrastructure engineer with 14 years of expertise designing globally distributed databases, automated workflow orchestrators, and enterprise office platforms serving tens of millions of active users worldwide.",
+  "experience": [
+    {
+      "id": "exp-1",
+      "company": "Horizon Cloud Systems",
+      "title": "Staff Platform Architect",
+      "location": "Seattle, WA",
+      "start": "2022-01",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Spearheaded redesign of global consensus layer achieving sub-10ms replication across six continental regions.",
+        "Orchestrated migration of 4,000 microservices to unified service mesh with zero unplanned downtime.",
+        "Pioneered automated chaos engineering practices that reduced multi-region recovery times by 68%.",
+        "Mentored twenty-four staff and principal engineers across platform and core reliability divisions."
+      ]
+    },
+    {
+      "id": "exp-2",
+      "company": "Vanguard Data Technologies",
+      "title": "Principal Software Architect",
+      "location": "Bellevue, WA",
+      "start": "2018-03",
+      "end": "2021-12",
+      "current": false,
+      "bullets": [
+        "Designed real-time streaming pipeline processing 1.2 billion events daily with strict ordering guarantees.",
+        "Introduced columnar storage tier cutting primary analytical storage expenditures by $1.8M annually.",
+        "Constructed automated provisioning framework for sovereign cloud deployments across European data centers.",
+        "Formulated technical roadmap for telemetry ingestion handling 85 TB of uncompressed logs per day."
+      ]
+    },
+    {
+      "id": "exp-3",
+      "company": "Pinnacle Enterprise Networks",
+      "title": "Senior Distributed Systems Engineer",
+      "location": "Redmond, WA",
+      "start": "2014-06",
+      "end": "2018-02",
+      "current": false,
+      "bullets": [
+        "Engineered zero-loss message transport protocol replacing legacy RPC mechanisms across corporate backbones.",
+        "Created distributed cache coordinator resolving long-standing cache invalidation stampedes under spike loads.",
+        "Maintained fault-tolerant configuration registry serving five hundred production services.",
+        "Authored internal RFCs on cryptographic identity propagation and zero-trust perimeter enforcement."
+      ]
+    },
+    {
+      "id": "exp-4",
+      "company": "Cascade Computational Labs",
+      "title": "Systems Software Developer",
+      "location": "Kirkland, WA",
+      "start": "2011-08",
+      "end": "2014-05",
+      "current": false,
+      "bullets": [
+        "Optimized Linux kernel network driver buffers achieving 35% throughput increase on 10GbE interfaces.",
+        "Implemented high-performance asynchronous I/O primitives in C++ for real-time risk calculations.",
+        "Developed comprehensive integration test harness executing thousands of hardware failure permutations."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "Chronos Key-Value Engine",
+      "url": "https://chronos-kv.org",
+      "bullets": [
+        "LSM-tree storage engine optimized for NVMe SSD drives featuring concurrent lock-free memtables.",
+        "Adopted by three enterprise database vendors as their underlying transactional storage engine."
+      ]
+    },
+    {
+      "id": "proj-2",
+      "name": "Aether Mesh Router",
+      "url": "https://aether-mesh.dev",
+      "bullets": [
+        "Lightweight eBPF-based transport proxy delivering sub-microsecond packet forwarding overhead.",
+        "Presented technical architecture at International Systems & Networks Conference 2023."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu-1",
+      "school": "University of Washington",
+      "degree": "Master of Science in Computer Science & Engineering",
+      "start": "2009-09",
+      "end": "2011-06"
+    },
+    {
+      "id": "edu-2",
+      "school": "Washington State University",
+      "degree": "Bachelor of Science in Computer Engineering",
+      "start": "2005-09",
+      "end": "2009-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Distributed Systems",
+      "items": ["Raft Consensus", "Paxos", "Distributed Transactions", "gRPC", "eBPF", "Kafka"]
+    },
+    {
+      "group": "Languages & Runtimes",
+      "items": ["Rust", "Go", "C++20", "TypeScript", "Linux Internals", "POSIX Systems"]
+    },
+    {
+      "group": "Data Storage & Ops",
+      "items": ["PostgreSQL", "RocksDB", "Cassandra", "Kubernetes", "Prometheus", "Envoy"]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "basics": {
+    "fullName": "Łukasz Żółć",
+    "headline": "Główny Inżynier Oprogramowania i Architekt Systemów",
+    "email": "lukasz.zolc@example.com",
+    "phone": "+48 22 123 45 67",
+    "location": "Warszawa, Polska",
+    "links": [
+      {
+        "label": "Profil",
+        "url": "https://lukaszzolc.pl"
+      }
+    ]
+  },
+  "summary": "Doświadczony architekt systemów chmurowych z pasją do tworzenia niezawodnych i skalowalnych rozwiązań teleinformatycznych.",
+  "experience": [
+    {
+      "id": "exp-1",
+      "company": "Polskie Technologie Informatyczne Sp. z o.o.",
+      "title": "Kierownik Zespołu Architektury Chmurowej",
+      "location": "Warszawa, Polska",
+      "start": "2021-06",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Zaprojektowanie ogólnokrajowej platformy przetwarzania danych o wysokiej przepustowości.",
+        "Wdrożenie nowoczesnych standardów bezpieczeństwa cyfrowego oraz monitoringu usług.",
+        "Koordynacja prac programistycznych nad integracją systemów bankowych i płatniczych."
+      ]
+    },
+    {
+      "id": "exp-2",
+      "company": "Krakowskie Centrum Badawczo-Rozwojowe",
+      "title": "Starszy Programista Systemowy",
+      "location": "Kraków, Polska",
+      "start": "2018-01",
+      "end": "2021-05",
+      "current": false,
+      "bullets": [
+        "Optymalizacja wydajności baz danych PostgreSQL oraz systemów kolejkowych Kafka.",
+        "Budowa niezawodnego oprogramowania do przetwarzania strumieniowego w czasie rzeczywistym."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "Projekt Żubr",
+      "url": "https://projekt-zubr.pl",
+      "bullets": [
+        "Otwarta biblioteka do szyfrowania i bezpiecznej wymiany dokumentów cyfrowych."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu-1",
+      "school": "Politechnika Warszawska",
+      "degree": "Magister Inżynier Informatyki",
+      "start": "2012-10",
+      "end": "2017-06"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Technologie i Języki",
+      "items": ["Java", "Kotlin", "Go", "Kubernetes", "Terraform", "PostgreSQL"]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "basics": {
+    "fullName": "Renée Noël Müller",
+    "headline": "Directrice de Technologie & Ingénieure Certifiée",
+    "email": "renee.noel.muller@example.com",
+    "phone": "+33 1 42 68 55 00",
+    "location": "Paris, France",
+    "links": [
+      {
+        "label": "Site Personnel",
+        "url": "https://reneemuller.fr"
+      }
+    ]
+  },
+  "summary": "Experte en ingénierie logicielle et architecture de systèmes distribués à grande échelle, dédiée à l'optimisation des flux de travail.",
+  "experience": [
+    {
+      "id": "exp-1",
+      "company": "Société Européenne d'Informatique",
+      "title": "Ingénieure en Chef des Données",
+      "location": "Paris, France",
+      "start": "2021-04",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Conception d'une plateforme d'analyse prédictive traitant des pétaoctets de données financières.",
+        "Gestion d'une équipe pluridisciplinaire de dix-huit ingénieurs et chercheurs en intelligence artificielle.",
+        "Modernisation complète des protocoles de sécurité selon les normes européennes RGPD."
+      ]
+    },
+    {
+      "id": "exp-2",
+      "company": "Atelier Numérique de Lyon",
+      "title": "Architecte Logiciel Senior",
+      "location": "Lyon, France",
+      "start": "2018-02",
+      "end": "2021-03",
+      "current": false,
+      "bullets": [
+        "Développement de micro-services hautement disponibles avec tolérance aux pannes certifiée.",
+        "Mise en œuvre d'outils collaboratifs automatisés pour le télétravail international."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "Système Étoile",
+      "url": "https://etoile-system.eu",
+      "bullets": [
+        "Bibliothèque open source pour le calcul distribué en temps réel."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu-1",
+      "school": "École Polytechnique de Paris",
+      "degree": "Diplôme d'Ingénieur en Informatique et Mathématiques Appliquées",
+      "start": "2013-09",
+      "end": "2017-06"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Compétences Techniques",
+      "items": ["Architecture Distribuée", "Rust", "Python", "Kubernetes", "PostgreSQL"]
+    }
+  ]
+}

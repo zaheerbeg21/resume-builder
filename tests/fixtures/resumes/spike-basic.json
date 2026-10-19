@@ -1,0 +1,78 @@
+{
+  "basics": {
+    "fullName": "Alex Morgan",
+    "headline": "Lead Systems Architect & Certified Engineer",
+    "email": "alex.morgan@example.com",
+    "phone": "+1 (555) 234-5678",
+    "location": "San Francisco, CA",
+    "links": [
+      {
+        "label": "GitHub",
+        "url": "https://github.com/alexmorgan"
+      },
+      {
+        "label": "Portfolio",
+        "url": "https://alexmorgan.dev"
+      }
+    ]
+  },
+  "summary": "Experienced systems architect specializing in high-throughput data processing and modern office workflow automation.",
+  "experience": [
+    {
+      "id": "exp-1",
+      "company": "Apex Dynamics Corp",
+      "title": "Principal Infrastructure Architect",
+      "location": "San Francisco, CA",
+      "start": "2022-06",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Architected distributed pipeline processing 250M daily events with 99.99% reliability.",
+        "Streamlined enterprise office workflow reducing administrative overhead by 42%.",
+        "Certified cloud security compliance across 14 Kubernetes clusters."
+      ]
+    },
+    {
+      "id": "exp-2",
+      "company": "Beacon Analytics Lab",
+      "title": "Senior Backend Developer",
+      "location": "Oakland, CA",
+      "start": "2020-01",
+      "end": "2022-05",
+      "current": false,
+      "bullets": [
+        "Implemented real-time telemetry indexing using Go and PostgreSQL.",
+        "Authored custom developer toolchain adopted by 85 engineers."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "FlowStream Engine",
+      "url": "https://flowstream.io",
+      "bullets": [
+        "Open-source workflow engine with over 3,000 GitHub stars."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu-1",
+      "school": "University of California, Berkeley",
+      "degree": "Bachelor of Science in Computer Science",
+      "start": "2015-09",
+      "end": "2019-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Languages & Frameworks",
+      "items": ["TypeScript", "Go", "Python", "React", "Node.js"]
+    },
+    {
+      "group": "Cloud & Infrastructure",
+      "items": ["AWS", "Docker", "Kubernetes", "PostgreSQL", "Terraform"]
+    }
+  ]
+}
