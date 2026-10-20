@@ -5,3 +5,4 @@
 2026-10-19: T-001 sabotage check 5 passed: with the hyphenation callback removed, both Criterion 4 tests go red.
 2026-10-20: T-001 sabotage checks 1-4, 6 passed: layout padding, font family, heading case, missing section and date format each turn tests red.
 2026-10-21: T-003 sabotage checks passed: bullet max boundary and month bounds regex each turn tests red.
+2026-10-21: Scoring engine sabotage checks passed: stuffing limit and summary weight each turn tests red.
