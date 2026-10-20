@@ -1,10 +1,11 @@
 import path from 'node:path';
 import { Font } from '@react-pdf/renderer';
 
-let isRegistered = false;
+const isAlreadyRegistered = () => Boolean((globalThis as Record<string, unknown>).__interFontsRegistered);
+const markRegistered = () => { (globalThis as Record<string, unknown>).__interFontsRegistered = true; };
 
 export function registerFonts(): void {
-  if (isRegistered) {
+  if (isAlreadyRegistered()) {
     return;
   }
 
@@ -34,5 +35,5 @@ export function registerFonts(): void {
     ],
   });
 
-  isRegistered = true;
+  markRegistered();
 }

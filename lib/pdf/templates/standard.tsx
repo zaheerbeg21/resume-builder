@@ -23,6 +23,9 @@ function formatYearMonth(ym: string | null | undefined): string {
   if (parts.length === 2) {
     const year = parts[0];
     const month = parseInt(parts[1], 10);
+    if (month < 1 || month > 12) {
+      return ym;
+    }
     const monthName = MONTH_NAMES[month - 1];
     return `${monthName} ${year}`;
   }
