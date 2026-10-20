@@ -132,3 +132,4 @@ export function scoreResume(resume: Resume, jd: JdAnalysis, formatScore01: numbe
 }
 
 export type MatchBreakdown = MatchResult['breakdown'];
+
