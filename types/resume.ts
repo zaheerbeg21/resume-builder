@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-const YearMonth = z.string().regex(/^[0-9]{4}(-[0-9]{2})?$/).nullable();
+export const YearMonth = z.string().regex(/^[0-9]{4}(-(0[1-9]|1[0-2]))?$/).nullable();
+export type YearMonth = z.infer<typeof YearMonth>;
 
 export const ResumeSchema = z.object({
   basics: z.object({
