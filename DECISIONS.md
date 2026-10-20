@@ -7,3 +7,4 @@
 2026-10-21: T-003 sabotage checks passed: bullet max boundary and month bounds regex each turn tests red.
 2026-10-21: Scoring engine sabotage checks passed: stuffing limit and summary weight each turn tests red.
 2026-10-21: T-002 sabotage checks passed: missing env key and invalid URL in .env.example each turn tests red.
+2026-10-21: T-004 initial schema migration with RLS on all tables, auth profile trigger, and 5-resume limit trigger.
