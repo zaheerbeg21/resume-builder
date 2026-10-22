@@ -11,3 +11,4 @@
 2026-10-22: T-006 Next.js 16 proxy route protection, SSR client factories, OAuth callback handler, and sabotage checks passed.
 2026-10-22: T-007 Resume CRUD API routes with Zod validation, 5-resume quota guard, and sabotage checks passed.
 2026-10-22: Auth UI login and register pages with Suspense, client validation, Google OAuth, and sabotage checks passed.
+2026-10-22: Dashboard page with quota badge, resume card grid, creation modal, and sabotage checks passed.
