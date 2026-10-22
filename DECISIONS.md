@@ -10,3 +10,4 @@
 2026-10-21: T-004 initial schema migration with RLS on all tables, auth profile trigger, and 5-resume limit trigger.
 2026-10-22: T-006 Next.js 16 proxy route protection, SSR client factories, OAuth callback handler, and sabotage checks passed.
 2026-10-22: T-007 Resume CRUD API routes with Zod validation, 5-resume quota guard, and sabotage checks passed.
+2026-10-22: Auth UI login and register pages with Suspense, client validation, Google OAuth, and sabotage checks passed.
