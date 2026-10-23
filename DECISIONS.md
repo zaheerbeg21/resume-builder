@@ -21,3 +21,4 @@
 2026-10-23: Resume import parser with pdf-parse v2 extraction, scan fallback, low-confidence review modal, and sabotage checks passed.
 2026-10-23: Stripe billing with  pass checkout, timingSafeEqual webhook verification, idempotency via stripe_events, and sabotage checks passed.
 2026-10-23: Public landing page with hero, interactive free ATS checker sandbox, competitor matrix,  pricing, and sabotage checks passed.
+2026-10-23: T-011 Classic serif template with Source Serif 4 fonts, template dispatching in preview/export, and sabotage checks passed.
