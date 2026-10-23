@@ -14,3 +14,4 @@
 2026-10-22: Dashboard page with quota badge, resume card grid, creation modal, and sabotage checks passed.
 2026-10-22: Guided Resume Editor with zero-dep store, form sections, 1000ms debounced autosave, and sabotage checks passed.
 2026-10-23: JD Target & Match Panel with SHA-256 cache, pure scoreResume, 1-click skill addition, and sabotage checks passed.
+2026-10-23: T-017 RootLayout children typed with Readonly<{ children: React.ReactNode }> to guarantee clean CI tsc typechecking without ambient .next/types.
