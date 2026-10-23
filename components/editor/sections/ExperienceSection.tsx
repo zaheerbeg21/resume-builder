@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useResumeStore, cleanBulletString } from '@/lib/stores/resume-store';
+import { BulletImproverModal } from '../BulletImproverModal';
 
 export const MAX_BULLETS_PER_EXPERIENCE = 8;
 export const MAX_BULLET_LENGTH = 300;
@@ -15,6 +16,38 @@ export function ExperienceSection() {
   const addExperienceBullet = useResumeStore((state) => state.addExperienceBullet);
   const updateExperienceBullet = useResumeStore((state) => state.updateExperienceBullet);
   const removeExperienceBullet = useResumeStore((state) => state.removeExperienceBullet);
+
+  const [improverModalState, setImproverModalState] = useState<{
+    isOpen: boolean;
+    expId: string;
+    bulletIndex: number;
+    initialBullet: string;
+    roleTitle: string;
+    isCurrentRole: boolean;
+  } | null>(null);
+
+  const handleOpenImprover = (
+    exp: (typeof experience)[number],
+    bulletIdx: number
+  ) => {
+    setImproverModalState({
+      isOpen: true,
+      expId: exp.id,
+      bulletIndex: bulletIdx,
+      initialBullet: exp.bullets[bulletIdx] || '',
+      roleTitle: exp.title,
+      isCurrentRole: Boolean(exp.current),
+    });
+  };
+
+  const handleApplyImprovedBullet = (newBulletText: string) => {
+    if (!improverModalState) return;
+    updateExperienceBullet(
+      improverModalState.expId,
+      improverModalState.bulletIndex,
+      newBulletText
+    );
+  };
 
   const handleAddPosition = () => {
     addExperience({
@@ -289,7 +322,16 @@ export function ExperienceSection() {
                             </button>
                           </div>
 
-                          <div className="flex justify-end pr-8">
+                          <div className="flex justify-between items-center pr-8">
+                            <button
+                              type="button"
+                              data-testid={`improve-bullet-${expIdx}-${bulletIdx}`}
+                              onClick={() => handleOpenImprover(exp, bulletIdx)}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition"
+                            >
+                              <span>✨ Improve with AI</span>
+                            </button>
+
                             <span
                               className={`text-[10px] font-mono ${
                                 isOverLimit
@@ -312,6 +354,19 @@ export function ExperienceSection() {
           })}
         </div>
       )}
+
+      {improverModalState && (
+        <BulletImproverModal
+          key={`${improverModalState.expId}-${improverModalState.bulletIndex}`}
+          isOpen={improverModalState.isOpen}
+          onClose={() => setImproverModalState(null)}
+          initialBullet={improverModalState.initialBullet}
+          roleTitle={improverModalState.roleTitle}
+          isCurrentRole={improverModalState.isCurrentRole}
+          onApply={handleApplyImprovedBullet}
+        />
+      )}
     </section>
   );
 }
+
