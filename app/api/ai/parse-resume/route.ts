@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
+import 'pdf-parse/worker';
 import { PDFParse } from 'pdf-parse';
 import { createClient } from '@/lib/db/supabase-server';
 import { ResumeParserOutputSchema, type ResumeParserOutput } from '@/lib/ai/schemas';
+
 
 export const PROMPT_VERSION = 'v1';
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
