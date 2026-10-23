@@ -15,3 +15,4 @@
 2026-10-22: Guided Resume Editor with zero-dep store, form sections, 1000ms debounced autosave, and sabotage checks passed.
 2026-10-23: JD Target & Match Panel with SHA-256 cache, pure scoreResume, 1-click skill addition, and sabotage checks passed.
 2026-10-23: T-017 RootLayout children typed with Readonly<{ children: React.ReactNode }> to guarantee clean CI tsc typechecking without ambient .next/types.
+2026-10-23: T-013 Live React-PDF preview canvas with zoom controls, browser-safe font loader, and sabotage checks passed.
