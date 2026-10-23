@@ -83,7 +83,8 @@ export function Footer() {
             <strong>Privacy & Integrity Statement:</strong> We never sell your data or log resume content. All resumes are strictly protected by PostgreSQL Row-Level Security (RLS) and encrypted storage.
           </p>
           <p className="text-center md:text-right shrink-0">
-            &copy; {new Date().getFullYear()} ATS Resume Builder. All rights reserved.
+            {/* &copy; {new Date().getFullYear()} ATS Resume Builder. All rights reserved. */}
+            &copy; 2026 ATS Resume Builder. All rights reserved.
           </p>
         </div>
       </div>

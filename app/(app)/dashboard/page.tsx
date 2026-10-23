@@ -1,15 +1,15 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/db/supabase-server';
 import { DashboardView } from '@/components/dashboard/DashboardView';
-import type { ResumeCardData } from '@/components/dashboard/ResumeCard';
 
 export const metadata: Metadata = {
   title: 'Dashboard | ATS Resume Builder',
-  description: 'Manage your ATS-optimized resumes with 100% parse-back fidelity and evidence-based scoring.',
+  description: 'Manage and create your ATS-optimized resumes.',
 };
 
-export default async function DashboardPage() {
+export async function DashboardContent() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -26,17 +26,19 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
 
-  const formattedResumes: ResumeCardData[] = (resumes ?? []).map((row) => ({
-    id: row.id,
-    title: row.title,
-    template: row.template,
-    updated_at: row.updated_at,
-  }));
+  return <DashboardView initialResumes={resumes ?? []} />;
+}
 
+export default function DashboardPage() {
   return (
-    <DashboardView
-      initialResumes={formattedResumes}
-      userEmail={user.email}
-    />
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center text-sm text-zinc-400">
+          Loading dashboard...
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }

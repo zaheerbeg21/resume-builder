@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/db/supabase-server';
@@ -13,8 +14,8 @@ export const metadata: Metadata = {
   description: 'Guided resume editor with live formatting, strict constraints, and debounced autosave.',
 };
 
-export default async function ResumeEditPage(props: EditPageProps) {
-  const { id } = await Promise.resolve(props.params);
+async function ResumeEditContent({ params }: EditPageProps) {
+  const { id } = await Promise.resolve(params);
 
   if (!id) {
     redirect('/dashboard');
@@ -49,4 +50,23 @@ export default async function ResumeEditPage(props: EditPageProps) {
   };
 
   return <EditorLayout initialResume={initialResume} />;
+}
+
+function EditLoadingSkeleton() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Loading resume editor...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function ResumeEditPage(props: EditPageProps) {
+  return (
+    <Suspense fallback={<EditLoadingSkeleton />}>
+      <ResumeEditContent params={props.params} />
+    </Suspense>
+  );
 }

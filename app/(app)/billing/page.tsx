@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/db/supabase-server';
@@ -17,7 +18,11 @@ interface BillingPageProps {
   }>;
 }
 
-export default async function BillingPage({ searchParams }: BillingPageProps) {
+async function BillingContent({
+  searchParams,
+}: {
+  searchParams?: Promise<{ success?: string; canceled?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -44,5 +49,19 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
       initialSuccess={isSuccess}
       initialCanceled={isCanceled}
     />
+  );
+}
+
+export default function BillingPage(props: BillingPageProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center text-sm text-zinc-400">
+          Loading billing details...
+        </div>
+      }
+    >
+      <BillingContent searchParams={props.searchParams} />
+    </Suspense>
   );
 }

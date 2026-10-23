@@ -6,7 +6,7 @@ import { EmptyDashboard } from '@/components/dashboard/EmptyDashboard';
 import { ResumeCard, type ResumeCardData } from '@/components/dashboard/ResumeCard';
 import { CreateResumeDialog } from '@/components/dashboard/CreateResumeDialog';
 import { DashboardView, MAX_RESUMES } from '@/components/dashboard/DashboardView';
-import DashboardPage from '@/app/(app)/dashboard/page';
+import DashboardPage, { DashboardContent } from '@/app/(app)/dashboard/page';
 import * as supabaseServerModule from '@/lib/db/supabase-server';
 
 // Mock next/navigation
@@ -65,7 +65,7 @@ describe('QuotaBadge Component', () => {
 describe('EmptyDashboard Component', () => {
   it('renders empty state illustration, heading, description, and CTA button', () => {
     const html = renderToString(
-      React.createElement(EmptyDashboard, { onCreateClick: () => {} })
+      React.createElement(EmptyDashboard, { onCreateClick: () => { } })
     );
 
     expect(html).toContain('data-testid="empty-dashboard"');
@@ -158,7 +158,7 @@ describe('ResumeCard Component', () => {
 describe('CreateResumeDialog Component', () => {
   it('does not render markup when isOpen is false', () => {
     const html = renderToString(
-      React.createElement(CreateResumeDialog, { isOpen: false, onClose: () => {} })
+      React.createElement(CreateResumeDialog, { isOpen: false, onClose: () => { } })
     );
 
     expect(html).toBe('');
@@ -168,7 +168,7 @@ describe('CreateResumeDialog Component', () => {
     const html = renderToString(
       React.createElement(CreateResumeDialog, {
         isOpen: true,
-        onClose: () => {},
+        onClose: () => { },
         userEmail: 'alex@example.com',
       })
     );
@@ -248,7 +248,7 @@ describe('DashboardPage Server Route Handler', () => {
       },
     } as unknown as Awaited<ReturnType<typeof supabaseServerModule.createClient>>);
 
-    await expect(DashboardPage()).rejects.toThrow('NEXT_REDIRECT: /login?returnTo=/dashboard');
+    await expect(DashboardContent()).rejects.toThrow('NEXT_REDIRECT: /login?returnTo=/dashboard');
     expect(mockRedirect).toHaveBeenCalledWith('/login?returnTo=/dashboard');
   });
 
@@ -283,7 +283,7 @@ describe('DashboardPage Server Route Handler', () => {
       }),
     } as unknown as Awaited<ReturnType<typeof supabaseServerModule.createClient>>);
 
-    const pageElement = await DashboardPage();
+    const pageElement = await DashboardContent();
     const html = renderToString(pageElement);
 
     expect(html).toContain('My Resumes');
