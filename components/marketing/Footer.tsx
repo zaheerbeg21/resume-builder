@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { Logo } from '@/components/ui/Logo';
 
 export function Footer() {
   return (
@@ -8,15 +9,8 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-zinc-100 dark:border-zinc-800/80">
           {/* Brand & Mission */}
           <div className="md:col-span-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center text-white dark:text-zinc-900 font-bold text-xs tracking-wider">
-                RB
-              </div>
-              <span className="font-bold text-zinc-900 dark:text-zinc-50 text-base">
-                ATS Resume Builder
-              </span>
-            </div>
-            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 max-w-sm leading-relaxed">
+            <Logo className="h-8 w-auto" />
+            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400 max-w-sm leading-relaxed">
               The resume builder that shows its work. Single-column, ATS-locked PDFs, deterministic keyword scoring, and honest AI that never hallucinates facts.
             </p>
             <div className="mt-4 inline-flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -83,8 +77,7 @@ export function Footer() {
             <strong>Privacy & Integrity Statement:</strong> We never sell your data or log resume content. All resumes are strictly protected by PostgreSQL Row-Level Security (RLS) and encrypted storage.
           </p>
           <p className="text-center md:text-right shrink-0">
-            {/* &copy; {new Date().getFullYear()} ATS Resume Builder. All rights reserved. */}
-            &copy; 2026 ATS Resume Builder. All rights reserved.
+            &copy; 2026 ATSProof Resume Builder. All rights reserved.
           </p>
         </div>
       </div>

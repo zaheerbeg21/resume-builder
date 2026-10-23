@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { Logo } from '@/components/ui/Logo';
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -10,19 +11,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200/80 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center text-white dark:text-zinc-900 font-bold text-sm tracking-wider shadow-xs">
-            RB
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-zinc-900 dark:text-zinc-50 text-base leading-tight tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-              ATS Resume Builder
-            </span>
-            <span className="text-[10px] text-zinc-500 dark:text-zinc-400 tracking-wide font-medium">
-              Shows Its Work
-            </span>
-          </div>
-        </Link>
+        <Logo className="h-8 w-auto" />
 
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-600 dark:text-zinc-300">
