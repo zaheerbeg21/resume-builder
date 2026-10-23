@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ResumeSchema } from '@/types/resume';
 
 export const JdKeywordSchema = z.object({
   term: z.string().min(1),
@@ -51,4 +52,10 @@ export const BulletOptimizeInputSchema = z.object({
   isCurrentRole: z.boolean().default(false),
 });
 export type BulletOptimizeInput = z.infer<typeof BulletOptimizeInputSchema>;
+
+export const ResumeParserOutputSchema = ResumeSchema.extend({
+  warnings: z.array(z.string()).max(20).default([]),
+  low_confidence_paths: z.array(z.string()).max(50).default([]),
+});
+export type ResumeParserOutput = z.infer<typeof ResumeParserOutputSchema>;
 

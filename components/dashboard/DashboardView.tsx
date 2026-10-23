@@ -6,6 +6,7 @@ import { QuotaBadge } from './QuotaBadge';
 import { ResumeCard, type ResumeCardData } from './ResumeCard';
 import { EmptyDashboard } from './EmptyDashboard';
 import { CreateResumeDialog } from './CreateResumeDialog';
+import { ImportResumeDialog } from '@/components/import';
 
 export interface DashboardViewProps {
   initialResumes: ResumeCardData[];
@@ -22,6 +23,7 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
   const router = useRouter();
   const [resumes, setResumes] = useState<ResumeCardData[]>(initialResumes);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   const resumeCount = resumes.length;
   const isQuotaReached = resumeCount >= MAX_RESUMES;
@@ -54,6 +56,43 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
 
         <div className="flex items-center gap-3 self-start sm:self-auto">
           <QuotaBadge count={resumeCount} max={MAX_RESUMES} />
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!isQuotaReached) {
+                setIsImportOpen(true);
+              }
+            }}
+            disabled={isQuotaReached}
+            data-testid="import-resume-header-btn"
+            aria-disabled={isQuotaReached}
+            title={
+              isQuotaReached
+                ? 'Resume limit reached (5 of 5). Delete a resume to import a new one.'
+                : 'Import resume from PDF'
+            }
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${
+              isQuotaReached
+                ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
+                : 'bg-white text-zinc-800 border border-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-700 cursor-pointer'
+            }`}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>Import PDF</span>
+          </button>
 
           <button
             type="button"
@@ -116,6 +155,15 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
         onClose={() => setIsCreateOpen(false)}
         userEmail={userEmail}
         onCreated={handleCreatedResume}
+      />
+
+      {/* Import Modal */}
+      <ImportResumeDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImportSuccess={(newResume) => {
+          handleCreatedResume(newResume as ResumeCardData);
+        }}
       />
     </div>
   );
