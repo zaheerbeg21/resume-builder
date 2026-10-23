@@ -6,6 +6,7 @@ import { PDFParse } from 'pdf-parse';
 import { createClient } from '@/lib/db/supabase-server';
 import { registerFonts } from '@/lib/pdf/fonts';
 import { ResumeDocument } from '@/lib/pdf/templates/standard';
+import { ClassicResumeDocument } from '@/lib/pdf/templates/classic';
 import { lintExtractedText } from '@/lib/pdf/lint';
 import type { Resume } from '@/types/resume';
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { resumeId } = parseResult.data;
+  const { resumeId, template: payloadTemplate } = parseResult.data;
 
   const { data: resumeRecord, error: dbError } = await supabase
     .from('resumes')
@@ -58,10 +59,13 @@ export async function POST(request: Request) {
   }
 
   const resumeData = resumeRecord.content as Resume;
+  const chosenTemplate = payloadTemplate || resumeRecord.template || 'standard';
 
   // 1. Render PDF buffer server-side
   registerFonts();
-  const documentElement = React.createElement(ResumeDocument, {
+  const DocumentComponent =
+    chosenTemplate === 'classic' ? ClassicResumeDocument : ResumeDocument;
+  const documentElement = React.createElement(DocumentComponent, {
     resume: resumeData,
   }) as unknown as React.ReactElement<React.ComponentProps<typeof Document>>;
 

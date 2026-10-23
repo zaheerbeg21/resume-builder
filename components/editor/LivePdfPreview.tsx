@@ -4,10 +4,13 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { Resume } from '@/types/resume';
 import { ResumeDocument } from '@/lib/pdf/templates/standard';
+import { ClassicResumeDocument } from '@/lib/pdf/templates/classic';
 import { registerFonts } from '@/lib/pdf/fonts';
+import { useResumeStore } from '@/lib/stores/resume-store';
 
 export interface LivePdfPreviewProps {
   resume: Resume;
+  template?: string;
   className?: string;
 }
 
@@ -44,9 +47,22 @@ export function PreviewSkeleton() {
 const DynamicPdfCanvas = dynamic(
   () =>
     import('@react-pdf/renderer').then((mod) => {
-      const CanvasComponent = ({ resume }: { resume: Resume }) => {
+      const CanvasComponent = ({
+        resume,
+        template,
+      }: {
+        resume: Resume;
+        template?: string;
+      }) => {
+        const renderDoc = (r: Resume, t?: string) =>
+          t === 'classic' ? (
+            <ClassicResumeDocument resume={r} />
+          ) : (
+            <ResumeDocument resume={r} />
+          );
+
         const [instance, updateInstance] = mod.usePDF({
-          document: <ResumeDocument resume={resume} />,
+          document: renderDoc(resume, template),
         });
 
         useEffect(() => {
@@ -54,8 +70,8 @@ const DynamicPdfCanvas = dynamic(
         }, []);
 
         useEffect(() => {
-          updateInstance(<ResumeDocument resume={resume} />);
-        }, [resume, updateInstance]);
+          updateInstance(renderDoc(resume, template));
+        }, [resume, template, updateInstance]);
 
         return (
           <div className="relative w-full h-full bg-white">
@@ -102,7 +118,9 @@ const DynamicPdfCanvas = dynamic(
   }
 );
 
-export function LivePdfPreview({ resume, className = '' }: LivePdfPreviewProps) {
+export function LivePdfPreview({ resume, template, className = '' }: LivePdfPreviewProps) {
+  const storeTemplate = useResumeStore((state) => state.template);
+  const activeTemplate = template ?? storeTemplate ?? 'standard';
   const [zoom, setZoom] = useState<number>(1);
   const [isFitWidth, setIsFitWidth] = useState<boolean>(true);
   const [debouncedResume, setDebouncedResume] = useState<Resume>(resume);
@@ -230,7 +248,7 @@ export function LivePdfPreview({ resume, className = '' }: LivePdfPreviewProps) 
             transformOrigin: 'top center',
           }}
         >
-          <DynamicPdfCanvas resume={debouncedResume} />
+          <DynamicPdfCanvas resume={debouncedResume} template={activeTemplate} />
         </div>
       </div>
     </div>
