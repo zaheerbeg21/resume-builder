@@ -19,3 +19,4 @@
 2026-10-23: Truth-Bound AI Bullet Improver with Google XYZ pattern, server digit guard, live placeholder interpolation, and sabotage checks passed.
 2026-10-23: PDF export pipeline with pdf-parse v2 pre-flight lint, placeholder blocker, and sabotage checks passed.
 2026-10-23: Resume import parser with pdf-parse v2 extraction, scan fallback, low-confidence review modal, and sabotage checks passed.
+2026-10-23: Stripe billing with  pass checkout, timingSafeEqual webhook verification, idempotency via stripe_events, and sabotage checks passed.
