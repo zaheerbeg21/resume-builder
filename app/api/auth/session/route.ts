@@ -27,7 +27,6 @@ export async function GET() {
             getUserEntitlement(user.id).catch(() => ({
                 hasActivePass: false,
                 daysRemaining: 0,
-                expiresAt: null,
             })),
         ]);
 
@@ -42,7 +41,6 @@ export async function GET() {
             entitlement: {
                 hasActivePass: entitlement.hasActivePass,
                 daysRemaining: entitlement.daysRemaining,
-                expiresAt: entitlement.expiresAt,
             },
             resumeCount: resumes.length,
             latestResumeId: resumes[0]?.id ?? null,
