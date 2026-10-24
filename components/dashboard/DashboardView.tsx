@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { QuotaBadge } from './QuotaBadge';
 import { ResumeCard, type ResumeCardData } from './ResumeCard';
@@ -27,6 +27,41 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
 
   const resumeCount = resumes.length;
   const isQuotaReached = resumeCount >= MAX_RESUMES;
+
+  // Listen for Left Sidebar triggers and URL query actions (?action=create or ?action=import)
+  useEffect(() => {
+    const handleOpenCreate = () => {
+      if (resumes.length < MAX_RESUMES) {
+        setIsCreateOpen(true);
+      }
+    };
+
+    const handleOpenImport = () => {
+      if (resumes.length < MAX_RESUMES) {
+        setIsImportOpen(true);
+      }
+    };
+
+    window.addEventListener('ats:open-create-resume', handleOpenCreate);
+    window.addEventListener('ats:open-import-resume', handleOpenImport);
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get('action');
+      if (action === 'create' && resumes.length < MAX_RESUMES) {
+        setIsCreateOpen(true);
+        window.history.replaceState({}, '', '/dashboard');
+      } else if (action === 'import' && resumes.length < MAX_RESUMES) {
+        setIsImportOpen(true);
+        window.history.replaceState({}, '', '/dashboard');
+      }
+    }
+
+    return () => {
+      window.removeEventListener('ats:open-create-resume', handleOpenCreate);
+      window.removeEventListener('ats:open-import-resume', handleOpenImport);
+    };
+  }, [resumes.length]);
 
   const handleDeleteResume = (deletedId: string) => {
     setResumes((prev) => prev.filter((r) => r.id !== deletedId));
@@ -72,11 +107,10 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
                 ? 'Resume limit reached (5 of 5). Delete a resume to import a new one.'
                 : 'Import resume from PDF'
             }
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${
-              isQuotaReached
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${isQuotaReached
                 ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
                 : 'bg-white text-zinc-800 border border-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-700 cursor-pointer'
-            }`}
+              }`}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -109,11 +143,10 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
                 ? 'Resume limit reached (5 of 5). Delete a resume to create a new one.'
                 : 'Create a new resume'
             }
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${
-              isQuotaReached
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${isQuotaReached
                 ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
                 : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white cursor-pointer'
-            }`}
+              }`}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -138,6 +171,43 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
             data-testid="resumes-grid"
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
+            {/* Rezi-Style Dashed Quick Create / Import Card */}
+            {!isQuotaReached && (
+              <div
+                data-testid="quick-create-tile"
+                className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/30 p-6 text-center hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors min-h-[170px]"
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="flex flex-col items-center group cursor-pointer focus:outline-none"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-zinc-200 dark:bg-zinc-800 group-hover:bg-indigo-600 group-hover:text-white text-zinc-600 dark:text-zinc-300 flex items-center justify-center transition-colors mb-3">
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                    Click to start a blank resume
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsImportOpen(true)}
+                  className="mt-1.5 text-xs text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 underline cursor-pointer"
+                >
+                  or drop / upload an existing PDF here
+                </button>
+              </div>
+            )}
+
             {resumes.map((resume) => (
               <ResumeCard
                 key={resume.id}

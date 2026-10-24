@@ -5,7 +5,7 @@ import { createClient } from '@/lib/db/supabase-server';
 import { DashboardView } from '@/components/dashboard/DashboardView';
 
 export const metadata: Metadata = {
-  title: 'Dashboard | ATS Resume Builder',
+  title: 'Dashboard | ATSProof Resume Builder',
   description: 'Manage and create your ATS-optimized resumes.',
 };
 
@@ -26,7 +26,7 @@ export async function DashboardContent() {
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
 
-  return <DashboardView initialResumes={resumes ?? []} />;
+  return <DashboardView initialResumes={resumes ?? []} userEmail={user.email} />;
 }
 
 export default function DashboardPage() {
