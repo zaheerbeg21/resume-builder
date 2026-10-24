@@ -35,6 +35,11 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const loginHref =
+    returnTo !== '/dashboard'
+      ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+      : '/login';
+
   const handleEmailBlur = () => {
     setEmailError(validateEmail(email));
   };
@@ -84,20 +89,41 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
         return;
       }
 
+      // Detect Supabase obfuscated duplicate user (e.g. email already used with Google OAuth)
+      if (
+        data?.user &&
+        Array.isArray(data.user.identities) &&
+        data.user.identities.length === 0
+      ) {
+        setIsLoading(false);
+        setPassword('');
+        setConfirmPassword('');
+        setFormError(
+          'An account with this email already exists. Please sign in with Google or use your existing password.'
+        );
+        return;
+      }
+
+      // Clear sensitive password inputs immediately on successful registration
+      setPassword('');
+      setConfirmPassword('');
       setIsLoading(false);
 
       if (data.session) {
-        // Immediate login / no email confirmation requirement
+        // Immediate login when email confirmation is disabled in Supabase
         if (typeof window !== 'undefined') {
           window.location.assign(returnTo);
         } else {
           router.push(returnTo);
         }
       } else {
-        // Confirmation email dispatched
+        // Confirmation email dispatched — show message and navigate to /login
         setSuccessMessage(
           'Registration successful! Please check your email inbox to verify your account before signing in.'
         );
+        setTimeout(() => {
+          router.push(loginHref);
+        }, 1500);
       }
     } catch (err: unknown) {
       setIsLoading(false);
@@ -106,10 +132,6 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
       setFormError(message);
     }
   };
-
-  const loginHref = returnTo !== '/dashboard'
-    ? `/login?returnTo=${encodeURIComponent(returnTo)}`
-    : '/login';
 
   return (
     <div className="w-full space-y-6">
@@ -141,7 +163,7 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
         <div
           role="status"
           aria-live="polite"
-          className="p-3.5 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg dark:bg-emerald-950/40 dark:border-emerald-900/50 dark:text-emerald-300"
+          className="p-3.5 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg dark:bg-emerald-950/40 dark:border-emerald-900/50 dark:text-emerald-300 space-y-2"
         >
           <div className="flex items-center gap-2">
             <svg
@@ -157,6 +179,15 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
               />
             </svg>
             <span>{successMessage}</span>
+          </div>
+          <div className="pl-6">
+            <Link
+              href={loginHref}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-900 dark:text-emerald-200 underline hover:no-underline"
+            >
+              <span>Redirecting to Sign In... Click here if not redirected</span>
+              <span>→</span>
+            </Link>
           </div>
         </div>
       )}
@@ -194,11 +225,10 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
             aria-invalid={Boolean(emailError)}
             aria-describedby={emailError ? 'register-email-error' : undefined}
             placeholder="you@example.com"
-            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${
-              emailError
-                ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
-            }`}
+            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${emailError
+              ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
+              : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
+              }`}
           />
           {emailError && (
             <p id="register-email-error" role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -230,11 +260,10 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
             aria-invalid={Boolean(passwordError)}
             aria-describedby={passwordError ? 'register-password-error' : undefined}
             placeholder="••••••••"
-            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${
-              passwordError
-                ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
-            }`}
+            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${passwordError
+              ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
+              : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
+              }`}
           />
           {passwordError && (
             <p id="register-password-error" role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -266,11 +295,10 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
             aria-invalid={Boolean(confirmError)}
             aria-describedby={confirmError ? 'register-confirm-error' : undefined}
             placeholder="••••••••"
-            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${
-              confirmError
-                ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
-            }`}
+            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${confirmError
+              ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
+              : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
+              }`}
           />
           {confirmError && (
             <p id="register-confirm-error" role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
