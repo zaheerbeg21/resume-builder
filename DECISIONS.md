@@ -23,3 +23,19 @@
 2026-10-23: Public landing page with hero, interactive free ATS checker sandbox, competitor matrix,  pricing, and sabotage checks passed.
 2026-10-23: T-011 Classic serif template with Source Serif 4 fonts, template dispatching in preview/export, and sabotage checks passed.
 2026-10-23: T-011 Classic serif template with Source Serif 4 fonts, template dispatching in preview/export, and sabotage checks passed.
+
+## ADR-018: Next.js 16 `cacheComponents` & `<Suspense>` Prerender Boundaries (2026-10-24)
+- **Context:** Next.js 16.4.2 with `cacheComponents` (Partial Prerendering) rejects `export const dynamic = 'force-dynamic'` and halts static shell generation if `cookies()`, `params`, `usePathname()`, or `new Date()` are called outside `<Suspense>`.
+- **Decision:** Move all server data fetching (`createClient()`, `params`) into internal async child components (`DashboardContent`, `ResumeEditContent`, `ResumeTargetContent`, `BillingContent`) wrapped in `<Suspense>`, wrap `AppShell` in `<Suspense>` inside `app/(app)/layout.tsx`, and use a static copyright year in `Footer.tsx`.
+
+## ADR-019: Serverless PDF Extraction Polyfill (`pdf-parse/worker`) (2026-10-24)
+- **Context:** `pdf-parse` v2 (`pdfjs-dist`) throws `ReferenceError: DOMMatrix is not defined` inside Vercel Node.js serverless functions.
+- **Decision:** Import `'pdf-parse/worker'` immediately above `'pdf-parse'` in `app/api/ai/parse-resume/route.ts` to polyfill `DOMMatrix` and `Path2D`, and keep `serverExternalPackages: ['pdf-parse']` in `next.config.ts`.
+
+## ADR-020: Rezi-Style Adaptive App Shell & Non-Blocking Session API (2026-10-24)
+- **Context:** Authenticated pages needed global navigation, pass status visibility, and 1-click logout without compressing the 50/50 split-screen PDF editor or breaking the 346 existing unit tests.
+- **Decision:** Introduce `app/(app)/layout.tsx` rendering `components/layout/AppShell.tsx` (240px expanded sidebar on `/dashboard` & `/billing`; 64px auto-collapsed icon rail on `/resumes/[id]/edit` & `/target`) backed by `app/api/auth/session/route.ts` (`GET` session/quota/pass status, `POST` server sign-out).
+
+## ADR-021: Brand Identity (`ATSProof Resume Builder`) & Signup Duplicate Guard (2026-10-24)
+- **Context:** Rebranded UI to **ATSProof Resume Builder** (`components/ui/Logo.tsx` with `aria-label="ATSProof - ATS Resume Builder"` for test parity) and hardened `RegisterForm.tsx`.
+- **Decision:** Clear password state immediately on signup, detect obfuscated duplicate/Google OAuth accounts via `data.user.identities.length === 0`, and auto-redirect to `/login`.
