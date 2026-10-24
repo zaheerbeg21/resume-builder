@@ -28,3 +28,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never review or approve your own work.
 - If a task needs a file outside the ticket's allowed list, stop and ask.
 - Run commands synchronously. Never start background tasks, timers, or schedules unless explicitly asked. Never run git commit unless explicitly asked.
+# Token discipline
+- Read only files named in the task. 
+- Do not list directories or search the repo unless asked.
+- Make targeted edits, never rewrite whole files. 
+- Run each command once; if it fails, stop after 3 attempts and report failing test names only. 
+- Do not re-read files you already read this session.
