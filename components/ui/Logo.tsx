@@ -8,10 +8,16 @@ interface LogoProps {
 
 export function Logo({ className = 'h-8 w-auto', showText = true }: LogoProps) {
     return (
+        // <Link
+        //     href="/"
+        //     className="inline-flex items-center gap-3 font-bold tracking-tight text-slate-900 transition-opacity hover:opacity-90 dark:text-white"
+        // >
         <Link
             href="/"
+            aria-label="ATSProof - Resume Builder"
             className="inline-flex items-center gap-3 font-bold tracking-tight text-slate-900 transition-opacity hover:opacity-90 dark:text-white"
         >
+
             {/* Precision Document Icon Mark */}
             <svg
                 viewBox="0 0 40 40"
