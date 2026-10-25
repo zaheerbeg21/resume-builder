@@ -35,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const [isCollapsed, setIsCollapsed] = useState(isWorkspaceRoute);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [atsGuideOpen, setAtsGuideOpen] = useState(false);
     const [isSigningOut, setIsSigningOut] = useState(false);
     const [session, setSession] = useState<SessionData | null>(null);
 
@@ -45,7 +46,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         setIsCollapsed(isWorkspaceRoute);
         setMobileNavOpen(false);
         setUserMenuOpen(false);
+        setAtsGuideOpen(false);
     }, [pathname, isWorkspaceRoute]);
+
+    // Close ATS guide modal on Escape
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setAtsGuideOpen(false);
+            }
+        };
+        if (atsGuideOpen) {
+            window.addEventListener('keydown', handleKeyDown);
+        }
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [atsGuideOpen]);
 
     // Fetch user session, pass status, and quota count
     useEffect(() => {
@@ -262,18 +277,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             </Link>
                         )}
 
-                        {/* 5. Free ATS Sandbox */}
-                        <Link
-                            href="/#ats-checker"
-                            title="Free ATS Format Checker"
-                            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white transition-colors ${isCollapsed ? 'justify-center px-0' : ''
+                        {/* 5. In-App ATS Format Guide */}
+                        <button
+                            type="button"
+                            onClick={() => setAtsGuideOpen(true)}
+                            title="ATS Format Guide & Pre-Flight Rules"
+                            data-testid="sidebar-ats-guide-btn"
+                            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer ${isCollapsed ? 'justify-center px-0' : 'w-full text-left'
                                 }`}
                         >
                             <svg className="w-4 h-4 shrink-0 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            {!isCollapsed && <span>ATS Format Check</span>}
-                        </Link>
+                            {!isCollapsed && <span>ATS Format Guide</span>}
+                        </button>
 
                         {/* 6. Billing & 30-Day Pass */}
                         <Link
@@ -514,16 +531,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                             <span>Account & Billing</span>
                                         </Link>
 
-                                        <Link
-                                            href="/#ats-checker"
-                                            onClick={() => setUserMenuOpen(false)}
-                                            className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setUserMenuOpen(false);
+                                                setAtsGuideOpen(true);
+                                            }}
+                                            data-testid="menu-ats-guide-btn"
+                                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-left cursor-pointer"
                                         >
                                             <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
                                             <span>ATS Format Guide</span>
-                                        </Link>
+                                        </button>
                                     </div>
 
                                     {/* Log out */}
@@ -598,6 +619,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         </Link>
                         <button
                             type="button"
+                            onClick={() => {
+                                setMobileNavOpen(false);
+                                setAtsGuideOpen(true);
+                            }}
+                            className="block w-full text-left py-2 text-sm font-semibold text-purple-300"
+                        >
+                            📋 ATS Format Guide
+                        </button>
+                        <button
+                            type="button"
                             onClick={handleSignOut}
                             className="w-full mt-2 py-2 text-left text-sm font-semibold text-rose-400 border-t border-slate-800 pt-3"
                         >
@@ -609,6 +640,160 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {/* Main View Content */}
                 <div className="flex-1 min-w-0">{children}</div>
             </div>
+
+            {/* ATS Format Guide & Pre-Flight Rules Modal */}
+            {atsGuideOpen && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="ats-guide-title"
+                    data-testid="ats-guide-modal"
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setAtsGuideOpen(false);
+                    }}
+                >
+                    <div className="relative w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="px-6 py-5 border-b border-zinc-200 dark:border-zinc-800 flex items-start justify-between gap-4 bg-zinc-50 dark:bg-zinc-950/50">
+                            <div>
+                                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 mb-2">
+                                    <svg className="w-3 h-3 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Parser Verification Rules
+                                </div>
+                                <h3 id="ats-guide-title" className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
+                                    ATS Format Guide & Pre-Flight Rules
+                                </h3>
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                    How ATSProof guarantees 100% clean parsing across Workday, Greenhouse, Lever, and Taleo.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setAtsGuideOpen(false)}
+                                aria-label="Close guide"
+                                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Rules Body */}
+                        <div className="px-6 py-5 overflow-y-auto space-y-4 text-xs text-zinc-600 dark:text-zinc-300">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Rule 1 */}
+                                <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40">
+                                    <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100 text-xs">
+                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px]">
+                                            1
+                                        </span>
+                                        Single-Column Layout
+                                    </div>
+                                    <p className="mt-1.5 leading-relaxed text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        Multi-column tables and floating text boxes scramble line order when parsed linearly by ATS engines. ATSProof renders pure single-column PDFs.
+                                    </p>
+                                </div>
+
+                                {/* Rule 2 */}
+                                <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40">
+                                    <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100 text-xs">
+                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px]">
+                                            2
+                                        </span>
+                                        Standard Section Headers
+                                    </div>
+                                    <p className="mt-1.5 leading-relaxed text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        Use recognized names (<code className="font-mono text-zinc-700 dark:text-zinc-300">Experience</code>, <code className="font-mono text-zinc-700 dark:text-zinc-300">Education</code>, <code className="font-mono text-zinc-700 dark:text-zinc-300">Skills</code>, <code className="font-mono text-zinc-700 dark:text-zinc-300">Projects</code>). Creative headings get dropped into unparsed blobs.
+                                    </p>
+                                </div>
+
+                                {/* Rule 3 */}
+                                <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40">
+                                    <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100 text-xs">
+                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px]">
+                                            3
+                                        </span>
+                                        Embedded Static Fonts
+                                    </div>
+                                    <p className="mt-1.5 leading-relaxed text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        System-dependent or variable fonts cause replacement glyphs (<code className="font-mono"></code>). All ATSProof exports embed static Inter or Serif TrueType fonts with 0 fallbacks.
+                                    </p>
+                                </div>
+
+                                {/* Rule 4 */}
+                                <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40">
+                                    <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100 text-xs">
+                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px]">
+                                            4
+                                        </span>
+                                        Real Selectable Text
+                                    </div>
+                                    <p className="mt-1.5 leading-relaxed text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        Never put contact info or skills in header/footer streams or canvas graphics. ATS crawlers discard graphic streams and un-parseable icons.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Pro-Tip Box */}
+                            <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-900/50 flex items-start gap-3">
+                                <span className="text-base shrink-0">🎯</span>
+                                <div>
+                                    <span className="font-bold text-indigo-900 dark:text-indigo-200 text-xs">
+                                        Deterministic Keyword Match
+                                    </span>
+                                    <p className="mt-0.5 text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                                        Target your resume against real job descriptions using the JD Keyword Match panel. We compute keyword coverage, title overlap, and section weights deterministically without AI hallucination.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer & Direct Action Buttons */}
+                        <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setAtsGuideOpen(false)}
+                                className="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                            >
+                                Close Guide
+                            </button>
+
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                {targetResumeId ? (
+                                    <>
+                                        <Link
+                                            href={`/resumes/${targetResumeId}/edit`}
+                                            onClick={() => setAtsGuideOpen(false)}
+                                            className="flex-1 sm:flex-none text-center px-3.5 py-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 font-semibold text-xs transition-colors"
+                                        >
+                                            Edit My Resume
+                                        </Link>
+                                        <Link
+                                            href={`/resumes/${targetResumeId}/target`}
+                                            onClick={() => setAtsGuideOpen(false)}
+                                            className="flex-1 sm:flex-none text-center px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs transition-colors"
+                                        >
+                                            Run JD Keyword Match →
+                                        </Link>
+                                    </>
+                                ) : (
+                                    <Link
+                                        href="/dashboard"
+                                        onClick={() => setAtsGuideOpen(false)}
+                                        className="w-full sm:w-auto text-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs transition-colors"
+                                    >
+                                        Go to My Dashboard →
+                                    </Link>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
