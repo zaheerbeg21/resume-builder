@@ -194,11 +194,19 @@ export function RegisterForm({ initialReturnTo }: RegisterFormProps) {
 
       <OAuthButtons returnTo={returnTo} onError={setFormError} disabled={isLoading} />
 
-      <div className="relative flex items-center justify-center">
+      {/* <div className="relative flex items-center justify-center">
         <div className="border-t border-slate-200 dark:border-neutral-800 w-full" />
         <span className="bg-white dark:bg-neutral-900 px-3 text-xs uppercase tracking-wider text-slate-500 dark:text-neutral-400 font-medium">
           Or register with email
         </span>
+      </div> */}
+
+      <div className="flex items-center gap-3" role="separator">
+        <div className="h-px flex-1 bg-slate-200 dark:bg-neutral-800" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-neutral-400 shrink-0">
+          OR<span className="sr-only"> register with email</span>
+        </span>
+        <div className="h-px flex-1 bg-slate-200 dark:bg-neutral-800" />
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="space-y-4">

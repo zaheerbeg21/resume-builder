@@ -115,11 +115,18 @@ export function LoginForm({ initialReturnTo }: LoginFormProps) {
 
       <OAuthButtons returnTo={returnTo} onError={setFormError} disabled={isLoading} />
 
-      <div className="relative flex items-center justify-center">
+      {/* <div className="relative flex items-center justify-center">
         <div className="border-t border-slate-200 dark:border-neutral-800 w-full" />
         <span className="bg-white dark:bg-neutral-900 px-3 text-xs uppercase tracking-wider text-slate-500 dark:text-neutral-400 font-medium">
           Or continue with email
         </span>
+      </div> */}
+      <div className="flex items-center gap-3" role="separator">
+        <div className="h-px flex-1 bg-slate-200 dark:bg-neutral-800" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-neutral-400 shrink-0">
+          OR<span className="sr-only"> continue with email</span>
+        </span>
+        <div className="h-px flex-1 bg-slate-200 dark:bg-neutral-800" />
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -146,11 +153,10 @@ export function LoginForm({ initialReturnTo }: LoginFormProps) {
             aria-invalid={Boolean(emailError)}
             aria-describedby={emailError ? 'email-error' : undefined}
             placeholder="you@example.com"
-            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${
-              emailError
-                ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
-            }`}
+            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${emailError
+              ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
+              : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
+              }`}
           />
           {emailError && (
             <p id="email-error" role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -182,11 +188,10 @@ export function LoginForm({ initialReturnTo }: LoginFormProps) {
             aria-invalid={Boolean(passwordError)}
             aria-describedby={passwordError ? 'password-error' : undefined}
             placeholder="••••••••"
-            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${
-              passwordError
-                ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
-            }`}
+            className={`w-full px-3.5 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 transition-colors focus:outline-none focus:ring-2 ${passwordError
+              ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
+              : 'border-slate-300 dark:border-neutral-700 focus:ring-slate-900 dark:focus:ring-neutral-400'
+              }`}
           />
           {passwordError && (
             <p id="password-error" role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
