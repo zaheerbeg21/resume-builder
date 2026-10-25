@@ -6,7 +6,7 @@ import { EmptyDashboard } from '@/components/dashboard/EmptyDashboard';
 import { ResumeCard, type ResumeCardData } from '@/components/dashboard/ResumeCard';
 import { CreateResumeDialog } from '@/components/dashboard/CreateResumeDialog';
 import { DashboardView, MAX_RESUMES } from '@/components/dashboard/DashboardView';
-import DashboardPage, { DashboardContent } from '@/app/(app)/dashboard/page';
+import { DashboardContent } from '@/app/(app)/dashboard/page';
 import * as supabaseServerModule from '@/lib/db/supabase-server';
 
 // Mock next/navigation

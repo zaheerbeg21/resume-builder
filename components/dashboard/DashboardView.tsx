@@ -8,6 +8,7 @@ import { EmptyDashboard } from './EmptyDashboard';
 import { CreateResumeDialog } from './CreateResumeDialog';
 import { ImportResumeDialog } from '@/components/import';
 
+
 export interface DashboardViewProps {
   initialResumes: ResumeCardData[];
   userEmail?: string;
@@ -44,23 +45,41 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
 
     window.addEventListener('ats:open-create-resume', handleOpenCreate);
     window.addEventListener('ats:open-import-resume', handleOpenImport);
-
+    let timerId: number | undefined;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const action = params.get('action');
-      if (action === 'create' && resumes.length < MAX_RESUMES) {
-        setIsCreateOpen(true);
+      if ((action === 'create' || action === 'import') && resumes.length < MAX_RESUMES) {
         window.history.replaceState({}, '', '/dashboard');
-      } else if (action === 'import' && resumes.length < MAX_RESUMES) {
-        setIsImportOpen(true);
-        window.history.replaceState({}, '', '/dashboard');
+        timerId = window.setTimeout(() => {
+          if (action === 'create') setIsCreateOpen(true);
+          if (action === 'import') setIsImportOpen(true);
+        }, 0);
       }
     }
 
     return () => {
+      if (timerId !== undefined) window.clearTimeout(timerId);
       window.removeEventListener('ats:open-create-resume', handleOpenCreate);
       window.removeEventListener('ats:open-import-resume', handleOpenImport);
     };
+    // if (typeof window !== 'undefined') {
+    //   const params = new URLSearchParams(window.location.search);
+    //   const action = params.get('action');
+    //   if (action === 'create' && resumes.length < MAX_RESUMES) {
+    //     setIsCreateOpen(true);
+    //     window.history.replaceState({}, '', '/dashboard');
+    //   } else if (action === 'import' && resumes.length < MAX_RESUMES) {
+    //     setIsImportOpen(true);
+    //     window.history.replaceState({}, '', '/dashboard');
+    //   }
+    // }
+
+    // return () => {
+    //   window.removeEventListener('ats:open-create-resume', handleOpenCreate);
+    //   window.removeEventListener('ats:open-import-resume', handleOpenImport);
+    // };
+
   }, [resumes.length]);
 
   const handleDeleteResume = (deletedId: string) => {
@@ -108,8 +127,8 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
                 : 'Import resume from PDF'
             }
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${isQuotaReached
-                ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
-                : 'bg-white text-zinc-800 border border-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-700 cursor-pointer'
+              ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
+              : 'bg-white text-zinc-800 border border-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-700 cursor-pointer'
               }`}
           >
             <svg
@@ -144,8 +163,8 @@ export function DashboardView({ initialResumes, userEmail }: DashboardViewProps)
                 : 'Create a new resume'
             }
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 ${isQuotaReached
-                ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
-                : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white cursor-pointer'
+              ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed opacity-60'
+              : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white cursor-pointer'
               }`}
           >
             <svg
