@@ -39,3 +39,4 @@
 ## ADR-021: Brand Identity (`ATSProof Resume Builder`) & Signup Duplicate Guard (2026-10-24)
 - **Context:** Rebranded UI to **ATSProof Resume Builder** (`components/ui/Logo.tsx` with `aria-label="ATSProof - ATS Resume Builder"` for test parity) and hardened `RegisterForm.tsx`.
 - **Decision:** Clear password state immediately on signup, detect obfuscated duplicate/Google OAuth accounts via `data.user.identities.length === 0`, and auto-redirect to `/login`.
+2026-10-25: Resume import redesign: LLM semantic extraction with provenance guard and import-draft schema; signed-URL upload (ADR-022); resilience and eval amendments (ADR-023); tickets T-019 to T-025. Layout extractor is conditional on a plain-text baseline. T-015 not yet built; amendments are docs edits.
