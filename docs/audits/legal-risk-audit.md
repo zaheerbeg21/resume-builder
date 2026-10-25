@@ -180,49 +180,95 @@ The following parameters must be supplied by the repository owner before impleme
 6. `[OWNER: DMCA agent postal address]` — Physical postal address for the designated copyright agent.
 7. `[OWNER: DMCA agent telephone]` — Telephone number of the designated copyright agent.
 8. `[OWNER: DMCA agent email]` — Dedicated email address for receiving copyright infringement notices.
-9. `[OWNER: DMCA agent registration fee & verification]` — Verification and payment of registration fee ($6 per 3-year term as of current regulations; owner must verify directly on copyright.gov).
-10. `[OWNER: subscription price]` — Recurring subscription price point (applicable only if recurring billing is introduced in the future).
+9. `[OWNER: DMCA agent registration fee & verification]` — Verification and payment of registration fee (verify current fee and renewal interval on copyright.gov; do not assume amounts or timeframes).
+10. `[OWNER: Stripe financial record retention decision]` — Confirmation whether Stripe customer IDs and payment records are retained for statutory tax/financial compliance (exact retention period to be confirmed with the owner's accountant or lawyer) or deleted via Stripe API upon user erasure (see T-026 Section 7).
+11. `[OWNER: minimum registration age decision]` — Confirmation with legal counsel of numerical age threshold in `lib/auth/config.ts` (default: 13; note EU GDPR Art. 8 varies between 13 and 16) and selection of age screen design (Option A: neutral DOB entry vs. Option B: confirmation checkbox).
+12. `[OWNER: subscription price]` — Recurring subscription price point (applicable only if recurring billing is introduced in the future).
 
 ---
 
-## 5. Proposed Ticket Breakdown (Using Next Free Ticket Numbers)
+## 5. Approved Execution Order & Ticket Breakdown
 
-The repository currently contains tickets `T-001.md` through `T-025.md` in `docs/tickets/`. The proposed compliance tickets utilize the next free ticket sequence:
+The repository contains tickets `T-001.md` through `T-025.md` in `docs/tickets/`. The active risks are sequenced and numbered as follows:
 
-- **`docs/tickets/T-026.md`:** **COPPA Compliance: Neutral Age Screen & Under-13 Account Block**
-  - *Owner:* Backend / Frontend Engineer | *Test Author:* QA Engineer
-  - *Scope:* Neutral date-of-birth screen, under-13 registration block, session cookie guard, server-side auth gate.
-- **`docs/tickets/T-027.md`:** **GDPR Compliance: Build-Time Font Self-Hosting Assertion & Test Suite**
+### Active Implementation Tickets
+- **`docs/tickets/T-026.md`:** **User Account Deletion & Cascade Data Erasure (GDPR Art. 17)**
+  - *Owner:* Backend & Frontend Engineer | *Test Author:* QA Engineer
+  - *Allowed Files:*
+    - `app/api/auth/account/route.ts`
+    - `components/dashboard/DeleteAccountModal.tsx`
+    - `components/dashboard/DashboardView.tsx`
+    - `tests/auth/account-deletion.test.ts`
+  - *Scope:* Authenticated `DELETE /api/auth/account` endpoint with mandatory re-authentication and rate limiting; explicit service-role purge of Supabase Storage objects (`resumes-raw/${user.id}/*`, as storage is not covered by database cascades); Supabase administrative user deletion (`auth.admin.deleteUser(user.id)`). Relies on the confirmed PostgreSQL cascade chain in `20261021000000_initial_schema.sql` (`profiles.id` references `auth.users(id)` ON DELETE CASCADE at line 13, and `resumes`, `jd_targets`, and `entitlements` cascade from `profiles` at lines 22, 37, 52), with `usage_events.user_id` already nullable with `ON DELETE SET NULL` at line 76 (no custom schema migration and no explicit `profiles` delete query required); session cookie invalidation; typed-confirmation UI dialog in `DashboardView.tsx`.
+  - *Tests:* First test is a real-schema migration test against `20261021000000_initial_schema.sql` asserting clean cascades and nullification; cross-user isolation test asserting User A cannot delete User B; re-authentication failure tests; rate limit tests; storage purge assertions.
+  - *Dependencies:* Depends on **T-020** for the `resumes-raw` storage bucket and `parse_jobs` table (storage purge and `parse_jobs` cascade assertions are skipped until T-020 is merged).
+
+- **`docs/tickets/T-027.md`:** **Statutory Legal Page Scaffolding (Privacy Policy & Terms of Service with Placeholders)**
+  - *Owner:* Frontend Engineer | *Test Author:* QA Engineer
+  - *Allowed Files:*
+    - `app/(marketing)/privacy/page.tsx`
+    - `app/(marketing)/terms/page.tsx`
+    - `components/marketing/Footer.tsx` *(edits Footer; downstream dependency for T-029)*
+    - `scripts/check-legal-placeholders.mjs`
+    - `tests/marketing/legal-pages.test.ts`
+  - *Scope:* Responsive `/privacy` and `/terms` route scaffolding with mandatory top lawyer-review disclaimers; zero invented text; strict `[OWNER: ...]` placeholders; SEO `noindex, nofollow` metadata; footer links to legal pages remain off until placeholders are replaced; and a dedicated release audit script (`scripts/check-legal-placeholders.mjs` / `npm run check:legal`) that checks for unpopulated placeholders prior to launch. Routine production deploys and CI builds are explicitly NOT blocked by placeholders.
+  - *Dependencies:* None on prior compliance tickets. Establishes the legal links block in `Footer.tsx` for `T-029`.
+
+- **`docs/tickets/T-028.md`:** **COPPA Compliance: Age Verification Screen & Under-Age Account Block**
+  - *Owner:* Frontend & Backend Engineer | *Test Author:* QA Engineer
+  - *Allowed Files:*
+    - `lib/auth/config.ts`
+    - `components/auth/AgeGateScreen.tsx`
+    - `components/auth/RegisterForm.tsx`
+    - `components/auth/OAuthButtons.tsx`
+    - `components/auth/validation.ts`
+    - `app/api/auth/age-gate/route.ts`
+    - `app/(auth)/callback/route.ts`
+    - `tests/auth/age-gate.test.ts`
+  - *Scope:* Centralizes minimum age into a single configuration constant (`lib/auth/config.ts`), noting that the threshold must be confirmed with legal counsel and that EU digital consent ages vary by member state (13–16). Implements pre-signup age gate with choice between Option A (neutral DOB entry; commonly recommended; confirm with a lawyer) and Option B (confirmation checkbox). Server-side enforcement route (`POST /api/auth/age-gate`) and OAuth callback guard in `callback/route.ts`. 24-hour secure HTTP-only block cookie (`coppa_blocked`) with explicitly accepted limit that clearing browser cookies bypasses the block. Zero storage of underage data.
+  - *Dependencies:* Auth files modified (`RegisterForm.tsx`, `OAuthButtons.tsx`, `validation.ts`, `callback/route.ts`) are exclusive to T-028.
+
+- **`docs/tickets/T-029.md`:** **DMCA Compliance: Designated Agent Page & Notice-and-Takedown Workflow**
+  - *Owner:* Frontend Engineer | *Test Author:* QA Engineer
+  - *Allowed Files:*
+    - `app/(marketing)/dmca/page.tsx`
+    - `components/marketing/Footer.tsx` *(edits Footer)*
+    - `tests/marketing/dmca.test.ts`
+  - *Scope:* Public `/dmca` page; statutory 17 U.S.C. § 512(c)(3) notice checklist; counter-notification procedure; repeat-infringer policy; designated agent `[OWNER: ...]` placeholders; and Copyright Office directory registration walkthrough with all fees and renewal intervals tagged with *(verify on copyright.gov)*.
+  - *Dependencies:* **Depends on T-027.** Both tickets edit `components/marketing/Footer.tsx`. T-027 must be merged first to establish the baseline legal footer links (`/privacy`, `/terms`); T-029 appends `/dmca` to that exact section.
+
+- **`docs/tickets/T-030.md`:** **GDPR Compliance: Font Self-Hosting Assertion & Test Suite**
   - *Owner:* Frontend / DevOps Engineer | *Test Author:* QA Engineer
-  - *Scope:* Automated test verifying zero external runtime font calls to Google CDNs across built output.
-- **`docs/tickets/T-028.md`:** **Privacy Safeguards: Session Replay Prevention & PII Input Masking Gate**
-  - *Owner:* Frontend Engineer | *Test Author:* QA Engineer
-  - *Scope:* Architectural gate ensuring any future telemetry/replay SDK is masked by default and gated by opt-in consent.
-- **`docs/tickets/T-029.md`:** **CAN-SPAM Compliance: Commercial Email Suppression & Postal Address Infrastructure**
-  - *Owner:* Backend Engineer | *Test Author:* QA Engineer
-  - *Scope:* Email suppression table schema, footer template with `[OWNER: postal address]` and 1-click unsubscribe helper.
-- **`docs/tickets/T-030.md`:** **Commerce Compliance: Centralized Pricing Config & Auto-Renewal Disclosure Guard**
-  - *Owner:* Backend Engineer | *Test Author:* QA Engineer
-  - *Scope:* Centralized pricing constants (`lib/billing/config.ts`), auto-renewal disclosure components for future subscriptions.
-- **`docs/tickets/T-031.md`:** **DMCA Compliance: Designated Agent Page & Notice-and-Takedown Workflow**
-  - *Owner:* Frontend Engineer | *Test Author:* QA Engineer
-  - *Scope:* `/dmca` public page, notice-and-takedown form/procedure, repeat-infringer policy, agent walkthrough.
-- **`docs/tickets/T-032.md`:** **Statutory Legal Pages: Dedicated Privacy Policy, Terms of Service & Account Deletion**
-  - *Owner:* Fullstack Engineer | *Test Author:* QA Engineer
-  - *Scope:* `/privacy` and `/terms` public routes, footer navigation links, and cascade account deletion endpoint.
+  - *Allowed Files:*
+    - `tests/compliance/fonts.test.ts`
+  - *Scope:* Automated compliance test suite explicitly delineating between source-only scanning (fast unit scan under plain `npm test`) and production build-output scanning (requires prior `npm run build` step; executed via `npm run build; npx vitest run tests/compliance/fonts.test.ts`). Asserts zero runtime references to `fonts.googleapis.com` or `fonts.gstatic.com` across source code, layouts, CSS, build outputs, and PDF templates.
+  - *Dependencies:* None. Can execute independently.
+
+### Formally Deferred Risks & Re-Open Triggers
+The following three compliance areas are formally deferred because the corresponding features do not exist in the codebase today. They will be re-opened upon reaching their respective technical triggers:
+
+1. **Session Replay & Tracking Safeguards:**
+   - *Status:* **Deferred** (No replay tools installed; zero form input capture active).
+   - *Re-Open Trigger:* When a session replay or user telemetry SDK (such as `@posthog/posthog-js` session recording, `@sentry/react` Replay, Hotjar, LogRocket, or Microsoft Clarity) is added to `package.json` or initialized in application layouts.
+2. **CAN-SPAM Commercial Email Compliance:**
+   - *Status:* **Deferred** (No marketing email pipelines exist; only Supabase Auth transactional verification emails are active).
+   - *Re-Open Trigger:* When an email transport library (`resend`, `@sendgrid/mail`, `nodemailer`, etc.) is installed or when automated commercial/promotional emails (such as onboarding email campaigns or pass-expiration re-buy offers) are scheduled.
+3. **Subscription Auto-Renewal Disclosures & Cancellation Path:**
+   - *Status:* **Deferred** (Current Stripe Checkout implementation operates strictly as a one-time 30-day pass under `mode: 'payment'`, with zero recurring auto-renewals).
+   - *Re-Open Trigger:* When recurring billing is introduced by switching Stripe Checkout or Billing configurations to `mode: 'subscription'`, or when recurring monthly/annual membership plans are added.
 
 ---
 
 ## 6. U.S. Copyright Office Registration Walkthrough (for Owner)
 
-*Note: You must verify the official URL, current statutory fee, and renewal interval directly on the U.S. Copyright Office website before submitting.*
+> **Notice:** The official registration fee, renewal interval, and exact online portal URL must be verified directly on the official U.S. Copyright Office website (`copyright.gov`), as regulations and portal interfaces are subject to administrative update.
 
-1. **Access the Directory:** Navigate to the official U.S. Copyright Office DMCA Designated Agent Directory portal (search for "U.S. Copyright Office DMCA Designated Agent Directory" at `copyright.gov`).
+1. **Access the Directory:** Navigate to the official U.S. Copyright Office DMCA Designated Agent Directory portal (search for "U.S. Copyright Office DMCA Designated Agent Directory" at `copyright.gov`; verify official portal URL on `copyright.gov`).
 2. **Create Service Provider Account:** Register an administrative account for your legal entity (`[OWNER: legal entity name]`).
 3. **Designate the Agent:** Complete the designation form specifying:
    - Full legal name or title of the designated agent (`[OWNER: DMCA agent name]`).
    - Physical street address (`[OWNER: DMCA agent postal address]`).
    - Telephone number (`[OWNER: DMCA agent telephone]`).
    - Email address for receipt of notices (`[OWNER: DMCA agent email]`).
-4. **Pay Statutory Fee:** Pay the designated registration fee online via Pay.gov (verify the current fee on `copyright.gov`; historically $6 for an online designation).
-5. **Set Renewal Reminder:** DMCA agent designations must be renewed every 3 years. Set an administrative calendar reminder to renew the designation prior to expiry to maintain safe harbor eligibility.
+4. **Pay Statutory Fee:** Pay the designated registration fee online via Pay.gov (verify current fee on `copyright.gov`).
+5. **Set Renewal Reminder:** Note the renewal deadline in your corporate compliance calendar (verify renewal interval on `copyright.gov`) to maintain safe harbor eligibility.
