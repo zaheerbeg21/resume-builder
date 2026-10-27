@@ -59,3 +59,89 @@ export const ResumeParserOutputSchema = ResumeSchema.extend({
 });
 export type ResumeParserOutput = z.infer<typeof ResumeParserOutputSchema>;
 
+export const SUMMARY_MAX = 600; // mirrors ResumeSchema
+export const EXPERIENCE_BULLETS_MAX = 8; // mirrors ResumeSchema
+export const PROJECT_BULLETS_MAX = 5; // mirrors ResumeSchema
+export const LINKS_MAX = 5; // mirrors ResumeSchema
+export const BULLET_CHARS_MAX = 300; // mirrors ResumeSchema
+
+export const ReviewFlagReasonSchema = z.enum(['EXCEEDS_LENGTH_LIMIT', 'UNSLOTTED_CONTENT']);
+export type ReviewFlagReason = z.infer<typeof ReviewFlagReasonSchema>;
+
+export const ReviewFlagSchema = z.object({
+  path: z.string(),
+  reason: ReviewFlagReasonSchema,
+  message: z.string().optional(),
+  excerpt: z.string().nullable().optional(),
+});
+export type ReviewFlag = z.infer<typeof ReviewFlagSchema>;
+
+// Format validation moves to the provenance guard (T-023)
+export const ResumeDraftDateSchema = z.string().nullable();
+export type ResumeDraftDate = z.infer<typeof ResumeDraftDateSchema>;
+
+export const ResumeDraftLinkSchema = z.object({
+  label: z.string(),
+  url: z.string(),
+});
+export type ResumeDraftLink = z.infer<typeof ResumeDraftLinkSchema>;
+
+export const ResumeImportDraftBasicsSchema = z.object({
+  fullName: z.string().nullable(),
+  headline: ResumeSchema.shape.basics.shape.headline,
+  email: z.string().nullable(),
+  phone: z.string().nullable().optional(),
+  location: ResumeSchema.shape.basics.shape.location,
+  links: z.array(ResumeDraftLinkSchema).default([]),
+});
+export type ResumeImportDraftBasics = z.infer<typeof ResumeImportDraftBasicsSchema>;
+
+export const ResumeImportDraftExperienceItemSchema = z.object({
+  id: z.string(),
+  company: z.string().nullable(),
+  title: z.string().nullable(),
+  location: z.string().optional(),
+  start: ResumeDraftDateSchema,
+  end: ResumeDraftDateSchema,
+  current: z.boolean().default(false),
+  bullets: z.array(z.string()).default([]),
+});
+export type ResumeImportDraftExperienceItem = z.infer<typeof ResumeImportDraftExperienceItemSchema>;
+
+export const ResumeImportDraftProjectItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().nullable().optional(),
+  bullets: z.array(z.string()).default([]),
+});
+export type ResumeImportDraftProjectItem = z.infer<typeof ResumeImportDraftProjectItemSchema>;
+
+export const ResumeImportDraftEducationItemSchema = z.object({
+  id: z.string(),
+  school: z.string().nullable(),
+  degree: z.string().nullable(),
+  start: ResumeDraftDateSchema,
+  end: ResumeDraftDateSchema,
+});
+export type ResumeImportDraftEducationItem = z.infer<typeof ResumeImportDraftEducationItemSchema>;
+
+export const ResumeImportDraftSchema = z.object({
+  basics: ResumeImportDraftBasicsSchema,
+  summary: z.string().default(''),
+  experience: z.array(ResumeImportDraftExperienceItemSchema).default([]),
+  projects: z.array(ResumeImportDraftProjectItemSchema).default([]),
+  education: z.array(ResumeImportDraftEducationItemSchema).default([]),
+  skills: ResumeSchema.shape.skills,
+  warnings: z.array(z.string()).default([]),
+  low_confidence_paths: z.array(z.string()).default([]),
+  review_flags: z.array(ReviewFlagSchema).default([]),
+});
+export type ResumeImportDraft = z.infer<typeof ResumeImportDraftSchema>;
+
+// Adds EXCEEDS_LENGTH_LIMIT flags (with path) for summary, experience bullet count, project bullet count, links count, and any bullet over BULLET_CHARS_MAX, and never truncates.
+export function flagOverLimitContent(draft: ResumeImportDraft): ResumeImportDraft {
+  void draft;
+  throw new Error('not implemented');
+}
+
+
