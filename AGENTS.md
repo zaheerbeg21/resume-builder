@@ -34,3 +34,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Make targeted edits, never rewrite whole files. 
 - Run each command once; if it fails, stop after 3 attempts and report failing test names only. 
 - Do not re-read files you already read this session.
+# Resume import work
+- Read and follow docs/design/resume-import-rules.md before changing app/api/ai/parse-resume, lib/ai or tests/fixtures/eval.
