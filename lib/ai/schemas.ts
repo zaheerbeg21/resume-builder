@@ -140,8 +140,61 @@ export type ResumeImportDraft = z.infer<typeof ResumeImportDraftSchema>;
 
 // Adds EXCEEDS_LENGTH_LIMIT flags (with path) for summary, experience bullet count, project bullet count, links count, and any bullet over BULLET_CHARS_MAX, and never truncates.
 export function flagOverLimitContent(draft: ResumeImportDraft): ResumeImportDraft {
-  void draft;
-  throw new Error('not implemented');
+  const newFlags: ReviewFlag[] = [];
+
+  if (draft.summary && draft.summary.length > SUMMARY_MAX) {
+    newFlags.push({
+      path: 'summary',
+      reason: 'EXCEEDS_LENGTH_LIMIT',
+    });
+  }
+
+  if (draft.basics.links && draft.basics.links.length > LINKS_MAX) {
+    newFlags.push({
+      path: 'basics.links',
+      reason: 'EXCEEDS_LENGTH_LIMIT',
+    });
+  }
+
+  draft.experience.forEach((exp, i) => {
+    if (exp.bullets && exp.bullets.length > EXPERIENCE_BULLETS_MAX) {
+      newFlags.push({
+        path: `experience[${i}].bullets`,
+        reason: 'EXCEEDS_LENGTH_LIMIT',
+      });
+    }
+    exp.bullets?.forEach((bullet, j) => {
+      if (bullet.length > BULLET_CHARS_MAX) {
+        newFlags.push({
+          path: `experience[${i}].bullets[${j}]`,
+          reason: 'EXCEEDS_LENGTH_LIMIT',
+        });
+      }
+    });
+  });
+
+  draft.projects.forEach((proj, i) => {
+    if (proj.bullets && proj.bullets.length > PROJECT_BULLETS_MAX) {
+      newFlags.push({
+        path: `projects[${i}].bullets`,
+        reason: 'EXCEEDS_LENGTH_LIMIT',
+      });
+    }
+    proj.bullets?.forEach((bullet, j) => {
+      if (bullet.length > BULLET_CHARS_MAX) {
+        newFlags.push({
+          path: `projects[${i}].bullets[${j}]`,
+          reason: 'EXCEEDS_LENGTH_LIMIT',
+        });
+      }
+    });
+  });
+
+  return {
+    ...draft,
+    review_flags: [...(draft.review_flags ?? []), ...newFlags],
+  };
 }
+
 
 
