@@ -576,7 +576,7 @@ Engineered cloud infrastructure components.
       summary: 'Invented summary not present anywhere in pre-entity region.',
     });
     const resultUnanchored = guardProvenance(draftUnanchored, headlessSource);
-    expect(resultUnanchored.draft.summary).toBeNull();
+    expect(resultUnanchored.draft.summary).toBe('');
     expect(resultUnanchored.report.nulledPaths).toEqual(['summary']);
 
     // No-verified-entity case: role has ungrounded title & company; bullet text exists in document footer but cannot be anchored
@@ -830,6 +830,23 @@ Built services.
 
     const resultDecoupled = guardProvenance(draft, decoupledSource);
     expect(resultDecoupled.report.decoupledRoles).toEqual(['experience[0]']);
+
+    // Title separated from company/dates by more than SPATIAL_WINDOW_LINES lines
+    const titleDecoupledFiller = Array.from(
+      { length: SPATIAL_WINDOW_LINES },
+      (_, i) => `title filler ${i + 1}`
+    ).join('\n');
+
+    const titleDecoupledSource = `
+Lead Developer
+${titleDecoupledFiller}
+Example Corp
+2020-01 - Present
+Built services.
+    `;
+
+    const resultTitleDecoupled = guardProvenance(draft, titleDecoupledSource);
+    expect(resultTitleDecoupled.report.decoupledRoles).toEqual(['experience[0]']);
   });
 
   it('12. entity-swap invariance: mechanical mapping yields identical report structure and mapped output equality', () => {
@@ -935,8 +952,8 @@ yamada@example.org | +81-3-0000-0000 | 東京都 | https://example.org/yamada
           company: '株式会社架空企業', // Hallucinated Japanese company
           title: 'ソフトウェアエンジニア', // Grounded
           start: '2020-01',
-          end: null,
-          current: true,
+          end: 'Present', // Source has 現在, but only English 'Present' is supported -> nulled & flagged per decision 4
+          current: false,
           bullets: ['分散バックエンドシステムの開発およびマイクロサービスの設計運用を担当。'],
         },
       ],
@@ -975,7 +992,8 @@ yamada@example.org | +81-3-0000-0000 | 東京都 | https://example.org/yamada
     expect(resultDraft.skills[0].items).toEqual(['TypeScript', 'Go言語']);
 
     expect(resultDraft.experience[0].company).toBeNull();
-    expect(report.nulledPaths).toEqual(['experience[0].company']);
+    expect(resultDraft.experience[0].end).toBeNull();
+    expect(report.nulledPaths).toEqual(['experience[0].company', 'experience[0].end']);
   });
 
   it('14. immutability: deep freeze on input verifies zero mutation, pre-call clone matches, and output differs', () => {
@@ -989,7 +1007,7 @@ yamada@example.org | +81-3-0000-0000 | 東京都 | https://example.org/yamada
 
     expect(draft).toEqual(cloneBefore);
     expect(outputDraft).not.toEqual(draft);
-    expect(outputDraft.summary).toBeNull();
+    expect(outputDraft.summary).toBe('');
   });
 
   it('15. non-truncation: long bullets maintain exact character length without clipping', () => {
