@@ -82,7 +82,7 @@ export type ResumeDraftDate = z.infer<typeof ResumeDraftDateSchema>;
 
 export const ResumeDraftLinkSchema = z.object({
   label: z.string(),
-  url: z.string(),
+  url: z.string().nullable(),
 });
 export type ResumeDraftLink = z.infer<typeof ResumeDraftLinkSchema>;
 
@@ -110,7 +110,7 @@ export type ResumeImportDraftExperienceItem = z.infer<typeof ResumeImportDraftEx
 
 export const ResumeImportDraftProjectItemSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().nullable(),
   url: z.string().nullable().optional(),
   bullets: z.array(z.string()).default([]),
 });

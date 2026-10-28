@@ -671,4 +671,43 @@ describe('T-021: ResumeImportDraftSchema & flagOverLimitContent', () => {
     const flagSchemaCheck = ReviewFlagSchema.safeParse(invalidFlag);
     expect(flagSchemaCheck.success).toBe(false);
   });
+
+  it('18. parses a project with name null', () => {
+    const draft = createFictionalValidDraft({
+      projects: [
+        {
+          id: 'proj-1',
+          name: null,
+          url: 'https://example.org/alpha',
+          bullets: ['Project task bullet.'],
+        },
+      ],
+    });
+
+    const parsed = ResumeImportDraftSchema.safeParse(draft);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    expect(parsed.data.projects[0].name).toBeNull();
+  });
+
+  it('19. parses a link with url null', () => {
+    const draft = createFictionalValidDraft({
+      basics: {
+        fullName: 'Alex Example',
+        headline: 'Developer',
+        email: 'alex@example.org',
+        links: [
+          { label: 'Website', url: null },
+        ],
+      },
+    });
+
+    const parsed = ResumeImportDraftSchema.safeParse(draft);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    expect(parsed.data.basics.links[0].url).toBeNull();
+  });
 });
+
