@@ -6,6 +6,7 @@ import {
   NGRAM_SIZE_STANDARD,
   NGRAM_SIZE_SHORT,
   SPATIAL_WINDOW_LINES,
+  DATE_SEARCH_MARGIN_LINES,
 } from '@/lib/ai/guards/provenance';
 import { ResumeImportDraftSchema, type ResumeImportDraft } from '@/lib/ai/schemas';
 
@@ -1173,5 +1174,35 @@ ${longBullet}
     expect(report.removedSkillPaths).toEqual([]);
     expect(report.unmappedDateRanges).toEqual([]);
     expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('17. pre-existing low_confidence_paths are preserved and new nulled paths are appended', () => {
+    expect(DATE_SEARCH_MARGIN_LINES).toBe(5);
+    const draft = createFictionalDraft(
+      {
+        low_confidence_paths: ['basics.headline'],
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Hallucinated Alpha Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, standardSourceText);
+
+    expect(resultDraft.experience[0].company).toBeNull();
+    expect(report.nulledPaths).toEqual(['experience[0].company']);
+    expect(resultDraft.low_confidence_paths).toEqual([
+      'basics.headline',
+      'experience[0].company',
+    ]);
   });
 });

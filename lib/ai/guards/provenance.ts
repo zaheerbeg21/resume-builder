@@ -6,6 +6,7 @@ export const SHORT_FIELD_WORD_LIMIT = 6; // starting value, tuned on corpus
 export const NGRAM_SIZE_STANDARD = 3; // starting value, tuned on corpus
 export const NGRAM_SIZE_SHORT = 2; // starting value, tuned on corpus
 export const SPATIAL_WINDOW_LINES = 4; // starting value, tuned on corpus
+export const DATE_SEARCH_MARGIN_LINES = 5; // starting value, tuned on corpus
 
 const CJK_REGEX = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/;
 const NUMBER_TOKEN_REGEX = /[$€£¥₹]?\d+(?:[.,]\d+)*(?:[kKmMbBxX%]|(?:\s*[$€£¥₹]))?/g;
@@ -326,8 +327,8 @@ export function guardProvenance(
     let dateLineIdx = -1;
     const anchorLine = anchorInfo.anchorLine;
     const searchAnchor = anchorLine !== -1 ? anchorLine : 0;
-    const searchWindowEnd = Math.min(sourceLines.length, searchAnchor + SPATIAL_WINDOW_LINES + 5);
-    for (let l = Math.max(0, searchAnchor - 5); l < searchWindowEnd; l++) {
+    const searchWindowEnd = Math.min(sourceLines.length, searchAnchor + SPATIAL_WINDOW_LINES + DATE_SEARCH_MARGIN_LINES);
+    for (let l = Math.max(0, searchAnchor - DATE_SEARCH_MARGIN_LINES); l < searchWindowEnd; l++) {
       if (exp.start && isGroundedSubstring(exp.start, sourceLines[l])) {
         dateLineIdx = l;
         break;
