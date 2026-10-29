@@ -18,66 +18,96 @@ function deepFreeze<T>(obj: T): T {
   return obj;
 }
 
-function createFictionalDraft(overrides: Partial<ResumeImportDraft> = {}): ResumeImportDraft {
-  const base: ResumeImportDraft = {
-    basics: {
-      fullName: 'Alex Example',
-      headline: 'Lead Developer',
-      email: 'alex@example.org',
-      phone: '+1-555-0100',
-      location: 'Example City',
-      links: [
-        { label: 'Website', url: 'https://example.org/alex' },
-      ],
-    },
-    summary: 'Experienced software engineer specializing in scalable backend systems.',
-    experience: [
-      {
-        id: 'exp-1',
-        company: 'Example Corp',
-        title: 'Lead Developer',
-        location: 'Example City',
-        start: '2020-01',
-        end: null,
-        current: true,
-        bullets: [
-          'Built scalable distributed backend services with high uptime and resilient data stores.',
+function createFictionalDraft(
+  overrides: Partial<ResumeImportDraft> = {},
+  options: { minimal?: boolean } = {}
+): ResumeImportDraft {
+  const base: ResumeImportDraft = options.minimal
+    ? {
+        basics: {
+          fullName: null,
+          headline: '',
+          email: null,
+          phone: null,
+          location: '',
+          links: [],
+        },
+        summary: '',
+        experience: [],
+        projects: [],
+        education: [],
+        skills: [],
+        warnings: [],
+        low_confidence_paths: [],
+        review_flags: [],
+      }
+    : {
+        basics: {
+          fullName: 'Alex Example',
+          headline: 'Lead Developer',
+          email: 'alex@example.org',
+          phone: '+1-555-0100',
+          location: 'Example City',
+          links: [
+            { label: 'Website', url: 'https://example.org/alex' },
+          ],
+        },
+        summary: 'Experienced software engineer specializing in scalable backend systems.',
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            location: 'Example City',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [
+              'Built scalable distributed backend services with high uptime and resilient data stores.',
+            ],
+          },
         ],
-      },
-    ],
-    projects: [
-      {
-        id: 'proj-1',
-        name: 'Project Alpha',
-        url: 'https://example.org/alpha',
-        bullets: [
-          'Engineered event-driven streaming pipeline processing high throughput events reliably.',
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project Alpha',
+            url: 'https://example.org/alpha',
+            bullets: [
+              'Engineered event-driven streaming pipeline processing high throughput events reliably.',
+            ],
+          },
         ],
-      },
-    ],
-    education: [
-      {
-        id: 'edu-1',
-        school: 'Example University',
-        degree: 'B.S. in Computer Science',
-        start: '2016-09',
-        end: '2020-05',
-      },
-    ],
-    skills: [
-      {
-        group: 'Programming',
-        items: ['TypeScript', 'Node.js', 'C++', 'C#'],
-      },
-    ],
-    warnings: [],
-    low_confidence_paths: [],
-    review_flags: [],
-  };
+        education: [
+          {
+            id: 'edu-1',
+            school: 'Example University',
+            degree: 'B.S. in Computer Science',
+            start: '2016-09',
+            end: '2020-05',
+          },
+        ],
+        skills: [
+          {
+            group: 'Programming',
+            items: ['TypeScript', 'Node.js', 'C++', 'C#'],
+          },
+        ],
+        warnings: [],
+        low_confidence_paths: [],
+        review_flags: [],
+      };
 
   return ResumeImportDraftSchema.parse({
     ...base,
     ...overrides,
+    ...(options.minimal && overrides.basics
+      ? {
+          basics: {
+            ...base.basics,
+            ...overrides.basics,
+          },
+        }
+      : {}),
   });
 }
 
@@ -273,21 +303,24 @@ Example Corp
 Refactored microservices architecture.
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: [
-            'Refactored microservices architecture, increasing throughput by 40% and saving $2M.',
-          ],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [
+              'Refactored microservices architecture, increasing throughput by 40% and saving $2M.',
+            ],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const result = guardProvenance(draft, source);
     expect(result.draft.experience[0].bullets).toEqual([]);
@@ -308,19 +341,22 @@ ${sourceBullet}
     // 30+ word source bullet plus 3-word invented tail with a number: "saving 500 hours"
     const inventedBullet = `${sourceBullet} saving 500 hours.`;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: [inventedBullet],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [inventedBullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const result = guardProvenance(draft, source);
     expect(result.draft.experience[0].bullets).toEqual([]);
@@ -338,19 +374,22 @@ Example Corp
 ${sourceBullet}
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: [sourceBullet],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [sourceBullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const result = guardProvenance(draft, source);
     expect(result.draft.experience[0].bullets).toEqual([sourceBullet]);
@@ -386,19 +425,22 @@ one two three four five six seven eight nine ten eleven twelve thirteen fourteen
     const bulletAt85 =
       'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen extraA extraB extraC';
 
-    const draftAt85 = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: [bulletAt85],
-        },
-      ],
-    });
+    const draftAt85 = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [bulletAt85],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const resultAt85 = guardProvenance(draftAt85, source);
     expect(resultAt85.draft.experience[0].bullets).toEqual([bulletAt85]);
@@ -406,19 +448,22 @@ one two three four five six seven eight nine ten eleven twelve thirteen fourteen
     const bulletBelow85 =
       'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen extraA extraB extraC extraD';
 
-    const draftBelow85 = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: [bulletBelow85],
-        },
-      ],
-    });
+    const draftBelow85 = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [bulletBelow85],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const resultBelow85 = guardProvenance(draftBelow85, source);
     expect(resultBelow85.draft.experience[0].bullets).toEqual([]);
@@ -457,19 +502,22 @@ ${sourceBullet}
     const outputBulletWithCurrency =
       'Managed an engineering department delivering software platforms on schedule with high reliability and zero downtime saving $2M across multiple global production clusters throughout the entire fiscal year.';
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: [outputBulletWithCurrency],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [outputBulletWithCurrency],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draft, source);
     expect(resultDraft.experience[0].bullets).toEqual([]);
@@ -490,56 +538,62 @@ Previous Solutions
 Optimized database query response times.
     `;
 
-    const crossRoleDraft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: ['Optimized database query response times.'], // Belongs to Previous Solutions
-        },
-        {
-          id: 'exp-2',
-          company: 'Previous Solutions',
-          title: 'Software Engineer',
-          start: '2018-06',
-          end: '2019-12',
-          current: false,
-          bullets: [],
-        },
-      ],
-    });
+    const crossRoleDraft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: ['Optimized database query response times.'], // Belongs to Previous Solutions
+          },
+          {
+            id: 'exp-2',
+            company: 'Previous Solutions',
+            title: 'Software Engineer',
+            start: '2018-06',
+            end: '2019-12',
+            current: false,
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const crossResult = guardProvenance(crossRoleDraft, multiRoleSource);
     expect(crossResult.draft.experience[0].bullets).toEqual([]);
     expect(crossResult.report.nulledPaths).toEqual(['experience[0].bullets[0]']);
 
     // Control: same bullet under correct role passes
-    const correctRoleDraft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: ['Engineered cloud infrastructure components.'],
-        },
-        {
-          id: 'exp-2',
-          company: 'Previous Solutions',
-          title: 'Software Engineer',
-          start: '2018-06',
-          end: '2019-12',
-          current: false,
-          bullets: ['Optimized database query response times.'],
-        },
-      ],
-    });
+    const correctRoleDraft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: ['Engineered cloud infrastructure components.'],
+          },
+          {
+            id: 'exp-2',
+            company: 'Previous Solutions',
+            title: 'Software Engineer',
+            start: '2018-06',
+            end: '2019-12',
+            current: false,
+            bullets: ['Optimized database query response times.'],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const correctResult = guardProvenance(correctRoleDraft, multiRoleSource);
     expect(correctResult.draft.experience[1].bullets).toEqual(['Optimized database query response times.']);
@@ -564,35 +618,84 @@ Engineered cloud infrastructure components.
     `;
 
     // Headless summary before first verified entity
-    const draftHeadless = createFictionalDraft({
-      summary: 'Self-directed engineer with deep expertise in distributed database architecture.',
-    });
+    const draftHeadless = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Alex Example',
+          headline: '',
+          email: 'alex@example.org',
+          links: [],
+        },
+        summary: 'Self-directed engineer with deep expertise in distributed database architecture.',
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: ['Built scalable backend services.'],
+          },
+        ],
+      },
+      { minimal: true }
+    );
     const resultHeadless = guardProvenance(draftHeadless, headlessSource);
     expect(resultHeadless.draft.summary).toBe('Self-directed engineer with deep expertise in distributed database architecture.');
     expect(resultHeadless.report.nulledPaths).toEqual([]);
 
     // Unanchored summary not present in the pre-entity region
-    const draftUnanchored = createFictionalDraft({
-      summary: 'Invented summary not present anywhere in pre-entity region.',
-    });
+    const draftUnanchored = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Alex Example',
+          headline: '',
+          email: 'alex@example.org',
+          links: [],
+        },
+        summary: 'Invented summary not present anywhere in pre-entity region.',
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: ['Built scalable backend services.'],
+          },
+        ],
+      },
+      { minimal: true }
+    );
     const resultUnanchored = guardProvenance(draftUnanchored, headlessSource);
     expect(resultUnanchored.draft.summary).toBe('');
     expect(resultUnanchored.report.nulledPaths).toEqual(['summary']);
 
     // No-verified-entity case: role has ungrounded title & company; bullet text exists in document footer but cannot be anchored
-    const draftNoVerifiedEntity = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Nonexistent Enterprise',
-          title: 'Ghost Specialist',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: ['Engineered cloud infrastructure components.'],
+    const draftNoVerifiedEntity = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Alex Example',
+          headline: '',
+          email: 'alex@example.org',
+          links: [],
         },
-      ],
-    });
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Nonexistent Enterprise',
+            title: 'Ghost Specialist',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: ['Engineered cloud infrastructure components.'],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const resultNoEntity = guardProvenance(draftNoVerifiedEntity, headlessSource);
     expect(resultNoEntity.draft.experience[0].bullets).toEqual([]);
@@ -621,37 +724,40 @@ B.S. in Computer Science
 2016 - 2020
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: 'March 2020',
-          end: 'Present',
-          current: false,
-          bullets: [],
-        },
-        {
-          id: 'exp-2',
-          company: 'Previous Solutions',
-          title: 'Software Engineer',
-          start: '06/2018',
-          end: '12/2019',
-          current: false,
-          bullets: [],
-        },
-      ],
-      education: [
-        {
-          id: 'edu-1',
-          school: 'Example University',
-          degree: 'B.S. in Computer Science',
-          start: '2016',
-          end: '2020',
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: 'March 2020',
+            end: 'Present',
+            current: false,
+            bullets: [],
+          },
+          {
+            id: 'exp-2',
+            company: 'Previous Solutions',
+            title: 'Software Engineer',
+            start: '06/2018',
+            end: '12/2019',
+            current: false,
+            bullets: [],
+          },
+        ],
+        education: [
+          {
+            id: 'edu-1',
+            school: 'Example University',
+            degree: 'B.S. in Computer Science',
+            start: '2016',
+            end: '2020',
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draft, dateSource);
 
@@ -671,19 +777,22 @@ Example Corp
 Built services.
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: 'Present',
-          current: false,
-          bullets: [],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: 'Present',
+            current: false,
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draft, source);
     expect(resultDraft.experience[0].end).toBeNull();
@@ -699,19 +808,22 @@ Example Corp
 Built services.
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '1995-05', // Ungrounded date
-          end: null,
-          current: true,
-          bullets: [],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '1995-05', // Ungrounded date
+            end: null,
+            current: true,
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draft, source);
     expect(resultDraft.experience[0].start).toBeNull();
@@ -726,19 +838,22 @@ Example Corp
 Built services.
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: 'not-a-valid-date-string',
-          end: null,
-          current: true,
-          bullets: [],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: 'not-a-valid-date-string',
+            end: null,
+            current: true,
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draft, source);
     expect(resultDraft.experience[0].start).toBeNull();
@@ -753,19 +868,22 @@ Example Corp
 Built services.
     `;
 
-    const draft = createFictionalDraft({
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Example Corp',
-          title: 'Lead Developer',
-          start: '15 de Mayo 2020',
-          end: null,
-          current: true,
-          bullets: [],
-        },
-      ],
-    });
+    const draft = createFictionalDraft(
+      {
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Lead Developer',
+            start: '15 de Mayo 2020',
+            end: null,
+            current: true,
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draft, source);
     expect(resultDraft.experience[0].start).toBeNull();
@@ -850,25 +968,28 @@ Built services.
   });
 
   it('12. entity-swap invariance: mechanical mapping yields identical report structure and mapped output equality', () => {
-    const draftA = createFictionalDraft({
-      basics: {
-        fullName: 'Alex Example',
-        headline: 'Lead Developer',
-        email: 'alex@example.org',
-        links: [],
-      },
-      experience: [
-        {
-          id: 'exp-1',
-          company: 'Hallucinated Alpha Corp',
-          title: 'Lead Developer',
-          start: '2020-01',
-          end: null,
-          current: true,
-          bullets: ['Built scalable distributed backend services with high uptime and resilient data stores.'],
+    const draftA = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Alex Example',
+          headline: 'Lead Developer',
+          email: 'alex@example.org',
+          links: [],
         },
-      ],
-    });
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Hallucinated Alpha Corp',
+            title: 'Lead Developer',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: ['Built scalable distributed backend services with high uptime and resilient data stores.'],
+          },
+        ],
+      },
+      { minimal: true }
+    );
 
     const sourceA = `
 Alex Example
@@ -936,43 +1057,46 @@ yamada@example.org | +81-3-0000-0000 | 東京都 | https://example.org/yamada
 技術: TypeScript, Go言語
     `;
 
-    const draftJapanese = createFictionalDraft({
-      basics: {
-        fullName: '山田 太郎',
-        headline: 'ソフトウェアエンジニア',
-        email: 'yamada@example.org',
-        phone: '+81-3-0000-0000',
-        location: '東京都',
-        links: [{ label: 'ウェブサイト', url: 'https://example.org/yamada' }],
+    const draftJapanese = createFictionalDraft(
+      {
+        basics: {
+          fullName: '山田 太郎',
+          headline: 'ソフトウェアエンジニア',
+          email: 'yamada@example.org',
+          phone: '+81-3-0000-0000',
+          location: '東京都',
+          links: [{ label: 'ウェブサイト', url: 'https://example.org/yamada' }],
+        },
+        summary: '大規模な分散システムとデータベースの設計および構築に従事。',
+        experience: [
+          {
+            id: 'exp-1',
+            company: '株式会社架空企業', // Hallucinated Japanese company
+            title: 'ソフトウェアエンジニア', // Grounded
+            start: '2020-01',
+            end: 'Present', // Source has 現在, but only English 'Present' is supported -> nulled & flagged per decision 4
+            current: false,
+            bullets: ['分散バックエンドシステムの開発およびマイクロサービスの設計運用を担当。'],
+          },
+        ],
+        education: [
+          {
+            id: 'edu-1',
+            school: '東京工科大学',
+            degree: '情報科学学士',
+            start: '2016-04',
+            end: '2020-03',
+          },
+        ],
+        skills: [
+          {
+            group: '技術',
+            items: ['TypeScript', 'Go言語'],
+          },
+        ],
       },
-      summary: '大規模な分散システムとデータベースの設計および構築に従事。',
-      experience: [
-        {
-          id: 'exp-1',
-          company: '株式会社架空企業', // Hallucinated Japanese company
-          title: 'ソフトウェアエンジニア', // Grounded
-          start: '2020-01',
-          end: 'Present', // Source has 現在, but only English 'Present' is supported -> nulled & flagged per decision 4
-          current: false,
-          bullets: ['分散バックエンドシステムの開発およびマイクロサービスの設計運用を担当。'],
-        },
-      ],
-      education: [
-        {
-          id: 'edu-1',
-          school: '東京工科大学',
-          degree: '情報科学学士',
-          start: '2016-04',
-          end: '2020-03',
-        },
-      ],
-      skills: [
-        {
-          group: '技術',
-          items: ['TypeScript', 'Go言語'],
-        },
-      ],
-    });
+      { minimal: true }
+    );
 
     const { draft: resultDraft, report } = guardProvenance(draftJapanese, japaneseSource);
 
