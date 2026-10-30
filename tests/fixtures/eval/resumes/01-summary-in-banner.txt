@@ -1,0 +1,21 @@
+Alex Example
+Lead Systems Architect
+alex.example@example.org | +1-555-0100 | Example City | https://example.org/alex
+
+Experienced systems architect specializing in high-throughput distributed systems, event-driven microservices, and automated cloud workflows. Proven record of designing resilient infrastructure supporting millions of operations.
+
+EXPERIENCE
+Example Corp
+Senior Software Engineer
+2020-01 - Present | Example City
+- Architected event stream processing pipeline handling 100M events per day.
+- Reduced database query latency by 45% using distributed in-memory cache.
+
+EDUCATION
+Example University
+Bachelor of Science in Computer Science
+2015-09 - 2019-05
+
+SKILLS
+Backend: Go, TypeScript, PostgreSQL
+Cloud: Docker, Kubernetes, AWS

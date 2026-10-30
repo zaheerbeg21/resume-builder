@@ -1,0 +1,59 @@
+{
+  "basics": {
+    "fullName": "Morgan Sample",
+    "headline": "Principal Infrastructure Architect",
+    "email": "morgan.sample@example.org",
+    "phone": "+1-555-0155",
+    "location": "Sample Town",
+    "links": []
+  },
+  "summary": "",
+  "experience": [
+    {
+      "company": "Sample Industries",
+      "title": "Principal Infrastructure Architect",
+      "location": "Sample Town",
+      "start": "2021-03",
+      "end": "2024-01",
+      "current": false,
+      "bullets": [
+        "Designed distributed cache layer improving throughput by 50%.",
+        "Automated disaster recovery workflows reducing failover time to under 2 minutes."
+      ]
+    },
+    {
+      "company": "Placeholder Corp",
+      "title": "Senior Software Engineer",
+      "location": "Sample Town",
+      "start": "2018-06",
+      "end": "2021-02",
+      "current": false,
+      "bullets": [
+        "Developed high-volume payment processing microservices using Go and PostgreSQL.",
+        "Implemented automated CI/CD pipelines decreasing build duration by 35%."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Sample College",
+      "degree": "Bachelor of Science in Software Engineering",
+      "start": "2014-09",
+      "end": "2018-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Infrastructure",
+      "items": ["Kubernetes", "Terraform", "AWS"]
+    },
+    {
+      "group": "Languages",
+      "items": ["Go", "Python", "SQL"]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}

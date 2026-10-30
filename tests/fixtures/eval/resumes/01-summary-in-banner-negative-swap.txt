@@ -1,0 +1,19 @@
+Taylor Sample
+Lead Systems Architect
+taylor.sample@example.org | +1-555-0100 | Sample Town | https://example.org/taylor
+
+EXPERIENCE
+Sample Industries
+Senior Software Engineer
+2020-01 - Present | Sample Town
+- Architected event stream processing pipeline handling 100M events per day.
+- Reduced database query latency by 45% using distributed in-memory cache.
+
+EDUCATION
+Sample College
+Bachelor of Science in Computer Science
+2015-09 - 2019-05
+
+SKILLS
+Backend: Go, TypeScript, PostgreSQL
+Cloud: Docker, Kubernetes, AWS

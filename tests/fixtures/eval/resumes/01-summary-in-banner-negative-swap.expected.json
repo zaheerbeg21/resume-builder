@@ -1,0 +1,52 @@
+{
+  "basics": {
+    "fullName": "Taylor Sample",
+    "headline": "Lead Systems Architect",
+    "email": "taylor.sample@example.org",
+    "phone": "+1-555-0100",
+    "location": "Sample Town",
+    "links": [
+      {
+        "label": "Portfolio",
+        "url": "https://example.org/taylor"
+      }
+    ]
+  },
+  "summary": "",
+  "experience": [
+    {
+      "company": "Sample Industries",
+      "title": "Senior Software Engineer",
+      "location": "Sample Town",
+      "start": "2020-01",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Architected event stream processing pipeline handling 100M events per day.",
+        "Reduced database query latency by 45% using distributed in-memory cache."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Sample College",
+      "degree": "Bachelor of Science in Computer Science",
+      "start": "2015-09",
+      "end": "2019-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Backend",
+      "items": ["Go", "TypeScript", "PostgreSQL"]
+    },
+    {
+      "group": "Cloud",
+      "items": ["Docker", "Kubernetes", "AWS"]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}

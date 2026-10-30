@@ -1,0 +1,60 @@
+{
+  "basics": {
+    "fullName": "Alex Example",
+    "headline": "Lead Systems Architect",
+    "email": "alex.example@example.org",
+    "phone": "+1-555-0100",
+    "location": "Example City",
+    "links": [
+      {
+        "label": "Portfolio",
+        "url": "https://example.org/alex"
+      }
+    ]
+  },
+  "summary": "Experienced systems architect specializing in high-throughput distributed systems, event-driven microservices, and automated cloud workflows. Proven record of designing resilient infrastructure supporting millions of operations.",
+  "experience": [
+    {
+      "company": "Example Corp",
+      "title": "Senior Software Engineer",
+      "location": "Example City",
+      "start": "2020-01",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Architected event stream processing pipeline handling 100M events per day.",
+        "Reduced database query latency by 45% using distributed in-memory cache."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Example University",
+      "degree": "Bachelor of Science in Computer Science",
+      "start": "2015-09",
+      "end": "2019-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Backend",
+      "items": [
+        "Go",
+        "TypeScript",
+        "PostgreSQL"
+      ]
+    },
+    {
+      "group": "Cloud",
+      "items": [
+        "Docker",
+        "Kubernetes",
+        "AWS"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}

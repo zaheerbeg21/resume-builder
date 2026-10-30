@@ -1,0 +1,25 @@
+Jordan Example
+Principal Infrastructure Architect
+jordan.example@example.org | +1-555-0155 | Example City
+
+EXPERIENCE
+Principal Infrastructure Architect
+Example Corp
+2021-03 - 2024-01 | Example City
+- Designed distributed cache layer improving throughput by 50%.
+- Automated disaster recovery workflows reducing failover time to under 2 minutes.
+
+Senior Software Engineer
+Fictional Labs
+2018-06 - 2021-02 | Example City
+- Developed high-volume payment processing microservices using Go and PostgreSQL.
+- Implemented automated CI/CD pipelines decreasing build duration by 35%.
+
+EDUCATION
+Example University
+Bachelor of Science in Software Engineering
+2014-09 - 2018-05
+
+SKILLS
+Infrastructure: Kubernetes, Terraform, AWS
+Languages: Go, Python, SQL
