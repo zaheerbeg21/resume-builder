@@ -11,7 +11,16 @@ Rules:
 
 // Contract: the first line of the returned prompt announces the marker, and the marker is chosen so that it does not occur in sourceText.
 export function buildResumePrompt(sourceText: string): string {
-  void sourceText;
-  throw new Error('not implemented');
+  let attempt = 0;
+  let marker = '<<<RESUME_SOURCE_BOUNDARY>>>';
+  while (sourceText.includes(marker)) {
+    attempt += 1;
+    marker = `<<<RESUME_SOURCE_BOUNDARY_${attempt}>>>`;
+  }
+  return [
+    `Delimiter marker line: ${marker}`,
+    marker,
+    sourceText,
+    marker,
+  ].join('\n');
 }
-
