@@ -5,7 +5,6 @@ export const TEMPERATURE = 0;
 export function resolveGeminiModel(
   env: Record<string, string | undefined>,
 ): string {
-  void env;
-  throw new Error('not implemented');
+  const candidate = env.GEMINI_MODEL_FAST?.trim();
+  return candidate && candidate.length > 0 ? candidate : DEFAULT_GEMINI_MODEL;
 }
-
