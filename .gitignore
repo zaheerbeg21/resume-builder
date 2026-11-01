@@ -43,3 +43,5 @@ Readme.txt
 
 # Whitelist environment template
 !.env.example
+.env.local
+
