@@ -634,13 +634,14 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
     });
 
     it('nulls link and project urls with schemes other than http, https, or mailto (javascript:, data:) and adds exact path-only warning', async () => {
-      const sourceWithUnsafeLinks = `${SAMPLE_RESUME_TEXT}\njavascript:alert(1)\ndata:text/html,payload`;
+      const sourceWithUnsafeLinks = `${SAMPLE_RESUME_TEXT}\nmailto:jordan.avery@example.org\njavascript:alert(1)\ndata:text/html,payload`;
       const draftWithUnsafeLinks = createBaseModelDraft({
         basics: {
           ...createBaseModelDraft().basics,
           links: [
             { label: 'BadLink', url: 'javascript:alert(1)' },
             { label: 'Mail', url: 'mailto:jordan.avery@example.org' },
+            { label: 'Portfolio', url: 'https://example.org/portfolio' },
           ],
         },
         projects: [
@@ -659,6 +660,9 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
       expect(result.draft.basics.links[1].url).toBe(
         'mailto:jordan.avery@example.org',
       );
+      expect(result.draft.basics.links[2].url).toBe(
+        'https://example.org/portfolio',
+      );
       expect(result.draft.projects[0].url).toBeNull();
 
       expect(result.draft.warnings).toContain(
@@ -671,6 +675,8 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
       const joinedWarnings = result.draft.warnings.join(' ');
       expect(joinedWarnings).not.toContain('javascript:alert(1)');
       expect(joinedWarnings).not.toContain('data:text/html,payload');
+      expect(joinedWarnings).not.toContain('mailto:jordan.avery@example.org');
+      expect(joinedWarnings).not.toContain('https://example.org/portfolio');
     });
 
     it('ensureUrlScheme handles www.example.org/a, example.org, https://example.org, http://example.org, mailto:a@example.org, empty string, and leaves javascript: untouched', () => {
