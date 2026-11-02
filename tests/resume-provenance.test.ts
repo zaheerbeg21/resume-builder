@@ -1205,4 +1205,242 @@ ${longBullet}
       'experience[0].company',
     ]);
   });
+
+  it('18. (1) headline equal to first role title does not anchor: grounded summary survives and summary is absent from nulledPaths', () => {
+    const summaryParagraph =
+      'Built distributed storage engines and low-latency replication pipelines across regional clusters.';
+    const source = [
+      'Jordan Avery',
+      'Staff Systems Architect',
+      'jordan.avery@example.org | +1-555-0148 | Stonehaven, EX',
+      'Summary',
+      summaryParagraph,
+      'Experience',
+      'Example Corp | Staff Systems Architect | 2020-01 - Present',
+      'Built scalable distributed backend services with high uptime and resilient data stores.',
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Jordan Avery',
+          headline: 'Staff Systems Architect',
+          email: 'jordan.avery@example.org',
+          phone: '+1-555-0148',
+          location: 'Stonehaven, EX',
+          links: [],
+        },
+        summary: summaryParagraph,
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Staff Systems Architect',
+            location: 'Stonehaven, EX',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [
+              'Built scalable distributed backend services with high uptime and resilient data stores.',
+            ],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.summary).toBe(summaryParagraph);
+    expect(report.nulledPaths).not.toContain('summary');
+    expect(report.nulledPaths).toEqual([]);
+    expect(resultDraft.low_confidence_paths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('19. (2) control: same source with headline equal to first role title still nulls an invented summary', () => {
+    const summaryParagraph =
+      'Built distributed storage engines and low-latency replication pipelines across regional clusters.';
+    const source = [
+      'Jordan Avery',
+      'Staff Systems Architect',
+      'jordan.avery@example.org | +1-555-0148 | Stonehaven, EX',
+      'Summary',
+      summaryParagraph,
+      'Experience',
+      'Example Corp | Staff Systems Architect | 2020-01 - Present',
+      'Built scalable distributed backend services with high uptime and resilient data stores.',
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Jordan Avery',
+          headline: 'Staff Systems Architect',
+          email: 'jordan.avery@example.org',
+          phone: '+1-555-0148',
+          location: 'Stonehaven, EX',
+          links: [],
+        },
+        summary:
+          'Invented executive summary claiming ten years of quantum compiler research.',
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Staff Systems Architect',
+            location: 'Stonehaven, EX',
+            start: '2020-01',
+            end: null,
+            current: true,
+            bullets: [
+              'Built scalable distributed backend services with high uptime and resilient data stores.',
+            ],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.summary).toBe('');
+    expect(report.nulledPaths).toEqual(['summary']);
+    expect(resultDraft.low_confidence_paths).toEqual(['summary']);
+  });
+
+  it('20. (3) headline equal to second role title only does not anchor: grounded summary survives', () => {
+    const summaryParagraph =
+      'Built distributed storage engines and low-latency replication pipelines across regional clusters.';
+    const source = [
+      'Jordan Avery',
+      'Senior Backend Developer',
+      'jordan.avery@example.org | +1-555-0148 | Stonehaven, EX',
+      'Summary',
+      summaryParagraph,
+      'Experience',
+      'Example Corp | Staff Systems Architect | 2021-03 - Present',
+      'Built scalable distributed backend services with high uptime and resilient data stores.',
+      'Northwind Labs | Senior Backend Developer | 2018-06 - 2021-02',
+      'Migrated ledger service to partitioned storage reducing tail latency across clusters.',
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Jordan Avery',
+          headline: 'Senior Backend Developer',
+          email: 'jordan.avery@example.org',
+          phone: '+1-555-0148',
+          location: 'Stonehaven, EX',
+          links: [],
+        },
+        summary: summaryParagraph,
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Staff Systems Architect',
+            location: 'Stonehaven, EX',
+            start: '2021-03',
+            end: null,
+            current: true,
+            bullets: [
+              'Built scalable distributed backend services with high uptime and resilient data stores.',
+            ],
+          },
+          {
+            id: 'exp-2',
+            company: 'Northwind Labs',
+            title: 'Senior Backend Developer',
+            location: 'Stonehaven, EX',
+            start: '2018-06',
+            end: '2021-02',
+            current: false,
+            bullets: [
+              'Migrated ledger service to partitioned storage reducing tail latency across clusters.',
+            ],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.summary).toBe(summaryParagraph);
+    expect(report.nulledPaths).not.toContain('summary');
+    expect(report.nulledPaths).toEqual([]);
+    expect(resultDraft.low_confidence_paths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('21. (4) first role has a null title: its company alone anchors and grounded summary survives', () => {
+    const summaryParagraph =
+      'Built distributed storage engines and low-latency replication pipelines across regional clusters.';
+    const roleBullet =
+      'Built scalable distributed backend services with high uptime and resilient data stores.';
+    const source = [
+      'Jordan Avery',
+      'Senior Backend Developer',
+      'jordan.avery@example.org | +1-555-0148 | Stonehaven, EX',
+      'Summary',
+      summaryParagraph,
+      'Experience',
+      'Example Corp | 2021-03 - Present',
+      roleBullet,
+      'Northwind Labs | Senior Backend Developer | 2018-06 - 2021-02',
+      'Migrated ledger service to partitioned storage reducing tail latency across clusters.',
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Jordan Avery',
+          headline: 'Senior Backend Developer',
+          email: 'jordan.avery@example.org',
+          phone: '+1-555-0148',
+          location: 'Stonehaven, EX',
+          links: [],
+        },
+        summary: summaryParagraph,
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: null,
+            location: 'Stonehaven, EX',
+            start: '2021-03',
+            end: null,
+            current: true,
+            bullets: [roleBullet],
+          },
+          {
+            id: 'exp-2',
+            company: 'Northwind Labs',
+            title: 'Senior Backend Developer',
+            location: 'Stonehaven, EX',
+            start: '2018-06',
+            end: '2021-02',
+            current: false,
+            bullets: [
+              'Migrated ledger service to partitioned storage reducing tail latency across clusters.',
+            ],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.summary).toBe(summaryParagraph);
+    expect(report.nulledPaths).not.toContain('summary');
+    expect(resultDraft.experience[0].company).toBe('Example Corp');
+    expect(resultDraft.experience[0].title).toBeNull();
+    expect(resultDraft.experience[0].bullets).toEqual([roleBullet]);
+    expect(report.nulledPaths).toEqual([]);
+    expect(resultDraft.low_confidence_paths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
 });
