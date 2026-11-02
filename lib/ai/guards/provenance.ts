@@ -210,37 +210,7 @@ export function guardProvenance(
     return { ...link };
   });
 
-  // Find first verified entity line for headless summary bounding
-  let firstVerifiedEntityLine = sourceLines.length;
-  draft.experience.forEach((exp) => {
-    if (exp.company && isGroundedSubstring(exp.company, sourceText)) {
-      const idx = findLineIndex(exp.company);
-      if (idx !== -1 && idx < firstVerifiedEntityLine) firstVerifiedEntityLine = idx;
-    }
-    if (exp.title && isGroundedSubstring(exp.title, sourceText)) {
-      const idx = findLineIndex(exp.title);
-      if (idx !== -1 && idx < firstVerifiedEntityLine) firstVerifiedEntityLine = idx;
-    }
-  });
-  draft.education.forEach((edu) => {
-    if (edu.school && isGroundedSubstring(edu.school, sourceText)) {
-      const idx = findLineIndex(edu.school);
-      if (idx !== -1 && idx < firstVerifiedEntityLine) firstVerifiedEntityLine = idx;
-    }
-  });
-
-  // 2. Summary verification: runs from document start to first verified entity
-  let newSummary = draft.summary;
-  if (newSummary.trim()) {
-    const summaryRegion = sourceLines.slice(0, firstVerifiedEntityLine).join('\n');
-
-    if (!isGroundedSubstring(newSummary, summaryRegion) && !evaluateBulletContainment(newSummary, summaryRegion)) {
-      newSummary = '';
-      nulledPaths.push('summary');
-    }
-  }
-
-  // 3. Experience verification
+  // 2. Experience anchors (computed first so summary region runs to first role anchor)
   interface ExperienceAnchor {
     company: string | null;
     companyLineIdx: number;
@@ -254,32 +224,53 @@ export function guardProvenance(
 
   for (let i = 0; i < draft.experience.length; i++) {
     const exp = draft.experience[i];
-    let company = exp.company;
-    let companyLineIdx = -1;
-    if (company !== null) {
-      if (!isGroundedSubstring(company, sourceText)) {
-        company = null;
-      } else {
-        companyLineIdx = findLineIndex(company, prevRoleEndLine);
-      }
-    }
+    const company =
+      exp.company !== null && isGroundedSubstring(exp.company, sourceText)
+        ? exp.company
+        : null;
+    const title =
+      exp.title !== null && isGroundedSubstring(exp.title, sourceText)
+        ? exp.title
+        : null;
 
-    let title = exp.title;
-    let titleLineIdx = -1;
-    if (title !== null) {
-      if (!isGroundedSubstring(title, sourceText)) {
-        title = null;
-      } else {
-        titleLineIdx = findLineIndex(title, prevRoleEndLine);
-      }
-    }
+    let companyLineIdx = company !== null ? findLineIndex(company, prevRoleEndLine) : -1;
+    let titleLineIdx = title !== null ? findLineIndex(title, prevRoleEndLine) : -1;
+    let anchorLine = -1;
 
-    const anchorLine =
-      companyLineIdx !== -1 && titleLineIdx !== -1
-        ? Math.min(companyLineIdx, titleLineIdx)
-        : companyLineIdx !== -1
-        ? companyLineIdx
-        : titleLineIdx;
+    if (company !== null && title !== null) {
+      let pairedC = -1;
+      let pairedT = -1;
+      for (let c = prevRoleEndLine; c < sourceLines.length; c++) {
+        if (!isGroundedSubstring(company, sourceLines[c])) continue;
+        const winStart = Math.max(prevRoleEndLine, c - SPATIAL_WINDOW_LINES);
+        const winEnd = Math.min(sourceLines.length - 1, c + SPATIAL_WINDOW_LINES);
+        let bestT = -1;
+        for (let t = winStart; t <= winEnd; t++) {
+          if (
+            isGroundedSubstring(title, sourceLines[t]) &&
+            (bestT === -1 || Math.abs(t - c) < Math.abs(bestT - c))
+          ) {
+            bestT = t;
+          }
+        }
+        if (bestT !== -1) {
+          pairedC = c;
+          pairedT = bestT;
+          break;
+        }
+      }
+      if (pairedC !== -1) {
+        companyLineIdx = pairedC;
+        titleLineIdx = pairedT;
+        anchorLine = Math.min(pairedC, pairedT);
+      } else {
+        anchorLine = companyLineIdx;
+      }
+    } else if (companyLineIdx !== -1) {
+      anchorLine = companyLineIdx;
+    } else {
+      anchorLine = titleLineIdx;
+    }
 
     if (anchorLine !== -1) {
       prevRoleEndLine = anchorLine + 1;
@@ -292,6 +283,34 @@ export function guardProvenance(
       titleLineIdx,
       anchorLine,
     });
+  }
+
+  // Find first verified entity line for summary bounding (first role anchor, or education if none)
+  let firstVerifiedEntityLine = sourceLines.length;
+  for (const anchor of expAnchors) {
+    if (anchor.anchorLine !== -1 && anchor.anchorLine < firstVerifiedEntityLine) {
+      firstVerifiedEntityLine = anchor.anchorLine;
+      break;
+    }
+  }
+  if (firstVerifiedEntityLine === sourceLines.length) {
+    draft.education.forEach((edu) => {
+      if (edu.school && isGroundedSubstring(edu.school, sourceText)) {
+        const idx = findLineIndex(edu.school);
+        if (idx !== -1 && idx < firstVerifiedEntityLine) firstVerifiedEntityLine = idx;
+      }
+    });
+  }
+
+  // 3. Summary verification: runs from document start to first role anchor
+  let newSummary = draft.summary;
+  if (newSummary.trim()) {
+    const summaryRegion = sourceLines.slice(0, firstVerifiedEntityLine).join('\n');
+
+    if (!isGroundedSubstring(newSummary, summaryRegion) && !evaluateBulletContainment(newSummary, summaryRegion)) {
+      newSummary = '';
+      nulledPaths.push('summary');
+    }
   }
 
   const newExperience = draft.experience.map((exp, i) => {
