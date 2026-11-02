@@ -17,6 +17,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { resolveGeminiModel } from '../lib/ai/config';
 import { ParseError, parseResume } from '../lib/ai/parsers/resume-parser';
 import { ProviderError } from '../lib/ai/provider';
 import { GeminiProvider } from '../lib/ai/providers/gemini';
@@ -29,7 +30,7 @@ const FIXTURES_DIR = path.join(
   'eval',
   'resumes',
 );
-const PAUSE_BETWEEN_CALLS_MS = 1000;
+const DEFAULT_PAUSE_BETWEEN_CALLS_MS = 1000;
 
 interface ExpectedBasics {
   fullName?: string | null;
@@ -78,10 +79,12 @@ interface ExpectedDraft {
 }
 
 type PathOutcome = 'correct' | 'wrong' | 'wrong_null' | 'surplus';
+type FailureCategory = 'timeout' | 'api_429' | 'api_503' | 'other';
 
 interface FixtureEvalMetrics {
   fixture: string;
   failed: boolean;
+  failureCategory?: FailureCategory;
   errorSummary?: string;
   total: number;
   correct: number;
@@ -98,7 +101,26 @@ interface FixtureEvalMetrics {
   pathOutcomes: Map<string, PathOutcome>;
 }
 
-function formatErrorOneLine(err: unknown): { name: string; firstLine: string; extra: string } {
+function classifyFailure(err: unknown): FailureCategory {
+  if (err instanceof ProviderError) {
+    if (err.kind === 'timeout') {
+      return 'timeout';
+    }
+    if (err.kind === 'api' && err.status === 429) {
+      return 'api_429';
+    }
+    if (err.kind === 'api' && err.status === 503) {
+      return 'api_503';
+    }
+  }
+  return 'other';
+}
+
+function formatErrorOneLine(err: unknown): {
+  name: string;
+  firstLine: string;
+  extra: string;
+} {
   const name = err instanceof Error ? err.name : 'NonErrorThrown';
   const rawMessage =
     err instanceof Error
@@ -141,6 +163,24 @@ function parseRunsArg(argv: string[]): number {
     }
   }
   return 1;
+}
+
+function parsePauseMsArg(argv: string[]): number {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--pause-ms' && argv[i + 1]) {
+      const parsed = Number.parseInt(argv[i + 1], 10);
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    } else if (arg.startsWith('--pause-ms=')) {
+      const parsed = Number.parseInt(arg.slice('--pause-ms='.length), 10);
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    }
+  }
+  return DEFAULT_PAUSE_BETWEEN_CALLS_MS;
 }
 
 function hasSelfCheckArg(argv: string[]): boolean {
@@ -492,18 +532,22 @@ function runSwapInvarianceCheck(results: FixtureEvalMetrics[]): void {
       if (!baseRes) {
         continue;
       }
+      if (baseRes.failed || res.failed) {
+        console.log(
+          `[swap-invariance] base=${baseName} twin=${res.fixture} status=SKIPPED`,
+        );
+        continue;
+      }
       const sameWrong = samePathSet(baseRes.wrongPaths, res.wrongPaths);
       const sameNull = samePathSet(baseRes.nullPaths, res.nullPaths);
-      const pass = !baseRes.failed && !res.failed && sameWrong && sameNull;
+      const status = sameWrong && sameNull ? 'PASS' : 'FAIL';
       console.log(
-        `[swap-invariance] base=${baseName} twin=${res.fixture} status=${pass ? 'PASS' : 'FAIL'} sameWrongPaths=${sameWrong} sameNullPaths=${sameNull}`,
+        `[swap-invariance] base=${baseName} twin=${res.fixture} status=${status} sameWrongPaths=${sameWrong} sameNullPaths=${sameNull}`,
       );
     }
   } catch (err: unknown) {
     const { name, firstLine } = formatErrorOneLine(err);
-    console.error(
-      `[step=runSwapInvarianceCheck] threw ${name}: ${firstLine}`,
-    );
+    console.error(`[step=runSwapInvarianceCheck] threw ${name}: ${firstLine}`);
     throw err;
   }
 }
@@ -513,6 +557,8 @@ async function runSinglePass(
   totalRuns: number,
   txtFiles: string[],
   provider: GeminiProvider | null,
+  configuredModel: string,
+  pauseMs: number,
   selfCheck: boolean,
 ): Promise<FixtureEvalMetrics[]> {
   const results: FixtureEvalMetrics[] = [];
@@ -527,8 +573,8 @@ async function runSinglePass(
     const txtPath = path.join(FIXTURES_DIR, txtFile);
     const expectedPath = path.join(FIXTURES_DIR, `${stem}.expected.json`);
 
-    if (!selfCheck && (idx > 0 || runIndex > 0)) {
-      await sleep(PAUSE_BETWEEN_CALLS_MS);
+    if (!selfCheck && pauseMs > 0 && (idx > 0 || runIndex > 0)) {
+      await sleep(pauseMs);
     }
 
     try {
@@ -548,7 +594,7 @@ async function runSinglePass(
           [],
           [],
           0,
-          'self-check',
+          configuredModel,
         );
       } else {
         if (!provider) {
@@ -573,11 +619,13 @@ async function runSinglePass(
       );
     } catch (err: unknown) {
       const { name, firstLine, extra } = formatErrorOneLine(err);
+      const failureCategory = classifyFailure(err);
       const errorSummary = `${name}${extra ? ` (${extra})` : ''}: ${firstLine}`;
       console.log(`[fixture=${stem}] FAILED ${errorSummary}`);
       results.push({
         fixture: stem,
         failed: true,
+        failureCategory,
         errorSummary,
         total: 0,
         correct: 0,
@@ -603,7 +651,7 @@ async function runSinglePass(
     .filter((r) => r.failed)
     .map((r) => r.fixture);
   const totalLatency = results.reduce((sum, r) => sum + r.latencyMs, 0);
-  const modelName = results.find((r) => r.model)?.model ?? 'unknown';
+  const modelName = results.find((r) => r.model)?.model ?? configuredModel;
 
   console.log(
     `[summary${totalRuns > 1 ? ` run=${runIndex + 1}` : ''}] model=${modelName} fixtures=${results.length} failedFixtures=${failedFixturesList.length} total=${totalFields} correct=${totalCorrect} wrong=${totalWrong} null=${totalNull} latencyMs=${totalLatency}`,
@@ -629,28 +677,29 @@ function reportMultiRunDiffs(allRuns: FixtureEvalMetrics[][]): void {
       const fixtureRuns = allRuns
         .map((run) => run.find((r) => r.fixture === fixture))
         .filter((r): r is FixtureEvalMetrics => r !== undefined);
+      const successfulRuns = fixtureRuns.filter((r) => !r.failed);
 
       const allPaths = new Set<string>();
-      for (const run of fixtureRuns) {
+      for (const run of successfulRuns) {
         for (const p of run.pathOutcomes.keys()) {
           allPaths.add(p);
         }
       }
 
       const differingPaths: string[] = [];
-      for (const p of allPaths) {
-        const outcomes = new Set(
-          fixtureRuns.map((r) =>
-            r.failed ? 'failed' : (r.pathOutcomes.get(p) ?? 'absent'),
-          ),
-        );
-        if (outcomes.size > 1) {
-          differingPaths.push(p);
+      if (successfulRuns.length >= 2) {
+        for (const p of allPaths) {
+          const outcomes = new Set(
+            successfulRuns.map((r) => r.pathOutcomes.get(p) ?? 'absent'),
+          );
+          if (outcomes.size > 1) {
+            differingPaths.push(p);
+          }
         }
       }
 
       console.log(
-        `[multi-run fixture=${fixture}] differingPaths=${JSON.stringify(differingPaths)}`,
+        `[multi-run fixture=${fixture}] resultsProduced=${successfulRuns.length}/${fixtureRuns.length} differingPaths=${JSON.stringify(differingPaths)}`,
       );
     }
   } catch (err: unknown) {
@@ -658,6 +707,26 @@ function reportMultiRunDiffs(allRuns: FixtureEvalMetrics[][]): void {
     console.error(`[step=reportMultiRunDiffs] threw ${name}: ${firstLine}`);
     throw err;
   }
+}
+
+function reportFailureCounts(allRuns: FixtureEvalMetrics[][]): void {
+  const counts: Record<FailureCategory, number> = {
+    timeout: 0,
+    api_429: 0,
+    api_503: 0,
+    other: 0,
+  };
+  for (const run of allRuns) {
+    for (const r of run) {
+      if (r.failed) {
+        const cat = r.failureCategory ?? 'other';
+        counts[cat] += 1;
+      }
+    }
+  }
+  console.log(
+    `[failure-counts] timeout=${counts.timeout} api_429=${counts.api_429} api_503=${counts.api_503} other=${counts.other}`,
+  );
 }
 
 async function discoverFixtureTxtFiles(): Promise<string[]> {
@@ -685,6 +754,8 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const selfCheck = hasSelfCheckArg(argv);
   const runs = parseRunsArg(argv);
+  const pauseMs = parsePauseMsArg(argv);
+  const configuredModel = resolveGeminiModel(process.env);
 
   let provider: GeminiProvider | null = null;
   if (!selfCheck) {
@@ -692,7 +763,7 @@ async function main(): Promise<void> {
       console.error('Missing required environment variable: GEMINI_API_KEY');
       process.exit(1);
     }
-    provider = new GeminiProvider();
+    provider = new GeminiProvider({ model: configuredModel });
   }
 
   const txtFiles = await discoverFixtureTxtFiles();
@@ -704,12 +775,15 @@ async function main(): Promise<void> {
       runs,
       txtFiles,
       provider,
+      configuredModel,
+      pauseMs,
       selfCheck,
     );
     allRuns.push(runMetrics);
   }
 
   reportMultiRunDiffs(allRuns);
+  reportFailureCounts(allRuns);
 }
 
 main().catch((err: unknown) => {
