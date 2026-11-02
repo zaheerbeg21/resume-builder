@@ -1,0 +1,73 @@
+{
+  "basics": {
+    "fullName": "Devon Placeholder",
+    "headline": "Platform Reliability Engineer",
+    "email": "devon.placeholder@example.org",
+    "phone": "+1-555-0158",
+    "location": "Example City",
+    "links": [
+      {
+        "label": "Website",
+        "url": "https://example.org/devon"
+      }
+    ]
+  },
+  "summary": "Built automated failover controllers and telemetry pipelines across multi-region cloud environments.",
+  "experience": [
+    {
+      "company": "Placeholder Corp",
+      "title": "Platform Reliability Engineer",
+      "location": "Example City",
+      "start": "2020-03",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Engineered automated cluster healing service reducing manual on-call interventions by 55%.",
+        "Implemented distributed tracing collectors processing 40M spans per minute."
+      ]
+    },
+    {
+      "company": "Fictional Labs",
+      "title": "Backend Systems Developer",
+      "location": "Example City",
+      "start": "2018-06",
+      "end": "2020-02",
+      "current": false,
+      "bullets": [
+        "Migrated legacy billing batch jobs to event-driven workers cutting processing window by 60%.",
+        "Maintained high-availability PostgreSQL replicas with automated schema verification."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Example Institute",
+      "degree": "Bachelor of Science in Computer Engineering",
+      "start": "2014",
+      "end": "2018"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Platform",
+      "items": [
+        "Kubernetes",
+        "Terraform",
+        "Prometheus"
+      ]
+    },
+    {
+      "group": "Languages",
+      "items": [
+        "Go",
+        "Python",
+        "SQL"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}
+

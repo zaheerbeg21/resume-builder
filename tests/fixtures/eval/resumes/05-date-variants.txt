@@ -1,0 +1,25 @@
+Devon Placeholder
+devon.placeholder@example.org   +1-555-0158
+Example City   https://example.org/devon
+Platform Reliability Engineer
+SUMMARY
+Built automated failover controllers and telemetry pipelines across multi-region cloud environments.
+EXPERIENCE
+March 2020 - Present   Example City
+Platform Reliability Engineer
+Placeholder Corp
+Engineered automated cluster healing service reducing manual on-call interventions by 55%.
+Implemented distributed tracing collectors processing 40M spans per minute.
+06/2018 - 02/2020
+Fictional Labs   Example City
+Backend Systems Developer
+Migrated legacy billing batch jobs to event-driven workers cutting processing window by 60%.
+Maintained high-availability PostgreSQL replicas with automated schema verification.
+EDUCATION
+2014 - 2018
+Example Institute
+Bachelor of Science in Computer Engineering
+SKILLS
+Platform: Kubernetes, Terraform, Prometheus
+Languages: Go, Python, SQL
+

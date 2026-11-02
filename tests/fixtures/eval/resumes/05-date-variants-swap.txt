@@ -1,0 +1,25 @@
+Quinn Synthetic
+quinn.synthetic@example.org   +1-555-0258
+Sample Town   https://example.org/quinn
+Platform Reliability Engineer
+SUMMARY
+Built automated failover controllers and telemetry pipelines across multi-region cloud environments.
+EXPERIENCE
+March 2020 - Present   Sample Town
+Platform Reliability Engineer
+Sample Industries
+Engineered automated cluster healing service reducing manual on-call interventions by 55%.
+Implemented distributed tracing collectors processing 40M spans per minute.
+06/2018 - 02/2020
+Mock Systems   Sample Town
+Backend Systems Developer
+Migrated legacy billing batch jobs to event-driven workers cutting processing window by 60%.
+Maintained high-availability PostgreSQL replicas with automated schema verification.
+EDUCATION
+2014 - 2018
+Sample Polytechnic
+Bachelor of Science in Computer Engineering
+SKILLS
+Platform: Kubernetes, Terraform, Prometheus
+Languages: Go, Python, SQL
+

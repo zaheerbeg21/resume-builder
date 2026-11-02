@@ -1,0 +1,24 @@
+Riley Sample
+Distributed Storage Engineer
+Sample Town   +1-555-0244
+riley.sample@example.org
+Portfolio: example.org/riley, Code: www.example.org/code/riley.
+SUMMARY
+Designed fault-tolerant block storage services and automated replication verifiers for cloud workloads.
+EXPERIENCE
+2021-04 - Present   Sample Town
+Sample Industries
+Distributed Storage Engineer
+Built quorum read-write coordinator handling 80,000 requests per second across regional clusters.
+Reduced snapshot restoration time by 40% using incremental chunk deduplication.
+PROJECTS
+FluxGrid (www.example.org/projects/fluxgrid).
+Implemented deterministic gossip state synchronization library in Go and TypeScript.
+EDUCATION
+2015-09 - 2019-05
+Bachelor of Science in Computer Science
+Sample College
+SKILLS
+Storage: Go, TypeScript, Raft
+Infrastructure: Linux, Docker, Kubernetes
+

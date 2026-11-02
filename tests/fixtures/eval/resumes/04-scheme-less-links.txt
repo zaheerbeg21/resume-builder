@@ -1,0 +1,24 @@
+Morgan Example
+Distributed Storage Engineer
+Example City   +1-555-0144
+morgan.example@example.org
+Portfolio: example.org/morgan, Code: www.example.org/code/morgan.
+SUMMARY
+Designed fault-tolerant block storage services and automated replication verifiers for cloud workloads.
+EXPERIENCE
+2021-04 - Present   Example City
+Example Corp
+Distributed Storage Engineer
+Built quorum read-write coordinator handling 80,000 requests per second across regional clusters.
+Reduced snapshot restoration time by 40% using incremental chunk deduplication.
+PROJECTS
+SyncMesh (www.example.org/projects/syncmesh).
+Implemented deterministic gossip state synchronization library in Go and TypeScript.
+EDUCATION
+2015-09 - 2019-05
+Bachelor of Science in Computer Science
+Example University
+SKILLS
+Storage: Go, TypeScript, Raft
+Infrastructure: Linux, Docker, Kubernetes
+

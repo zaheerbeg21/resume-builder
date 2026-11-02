@@ -1,0 +1,73 @@
+{
+  "basics": {
+    "fullName": "Riley Sample",
+    "headline": "Distributed Storage Engineer",
+    "email": "riley.sample@example.org",
+    "phone": "+1-555-0244",
+    "location": "Sample Town",
+    "links": [
+      {
+        "label": "Portfolio",
+        "url": "https://example.org/riley"
+      },
+      {
+        "label": "Code",
+        "url": "https://www.example.org/code/riley"
+      }
+    ]
+  },
+  "summary": "Designed fault-tolerant block storage services and automated replication verifiers for cloud workloads.",
+  "experience": [
+    {
+      "company": "Sample Industries",
+      "title": "Distributed Storage Engineer",
+      "location": "Sample Town",
+      "start": "2021-04",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Built quorum read-write coordinator handling 80,000 requests per second across regional clusters.",
+        "Reduced snapshot restoration time by 40% using incremental chunk deduplication."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "FluxGrid",
+      "url": "https://www.example.org/projects/fluxgrid",
+      "bullets": [
+        "Implemented deterministic gossip state synchronization library in Go and TypeScript."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "school": "Sample College",
+      "degree": "Bachelor of Science in Computer Science",
+      "start": "2015-09",
+      "end": "2019-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Storage",
+      "items": [
+        "Go",
+        "TypeScript",
+        "Raft"
+      ]
+    },
+    {
+      "group": "Infrastructure",
+      "items": [
+        "Linux",
+        "Docker",
+        "Kubernetes"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}
+
