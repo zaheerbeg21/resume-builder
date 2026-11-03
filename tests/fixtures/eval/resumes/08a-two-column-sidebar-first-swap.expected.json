@@ -1,0 +1,79 @@
+{
+  "basics": {
+    "fullName": "Sawyer Sample",
+    "headline": "Staff Backend Engineer",
+    "email": "sawyer.sample@example.org",
+    "phone": "+1-555-0281",
+    "location": "Sample Town",
+    "links": [
+      {
+        "label": "Portfolio",
+        "url": "https://example.org/sawyer"
+      }
+    ]
+  },
+  "summary": "Backend engineer building event-driven ingestion pipelines and partitioned time-series stores for high-cardinality telemetry.",
+  "experience": [
+    {
+      "company": "Sample Industries",
+      "title": "Staff Backend Engineer",
+      "location": "Sample Town",
+      "start": "2022-02",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Designed partitioned Kafka ingestion pipeline processing 85,000 events per second with bounded consumer lag under regional failover.",
+        "Cut ClickHouse query tail latency by 38% by restructuring primary keys and materialized rollups."
+      ]
+    },
+    {
+      "company": "Placeholder Group",
+      "title": "Backend Engineer",
+      "location": "Sample Town",
+      "start": "2019-06",
+      "end": "2022-01",
+      "current": false,
+      "bullets": [
+        "Built gRPC rate-limiting service enforcing per-tenant token buckets across 14 edge clusters."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Sample College",
+      "degree": "Bachelor of Science in Computer Engineering",
+      "start": "2015-09",
+      "end": "2019-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Backend",
+      "items": [
+        "Go",
+        "Rust",
+        "gRPC",
+        "Kafka"
+      ]
+    },
+    {
+      "group": "Storage",
+      "items": [
+        "PostgreSQL",
+        "ClickHouse",
+        "Redis"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": [
+    {
+      "path": "unslotted[0]",
+      "reason": "UNSLOTTED_CONTENT",
+      "excerpt": "English (Native), French (Professional Working)"
+    }
+  ]
+}
+

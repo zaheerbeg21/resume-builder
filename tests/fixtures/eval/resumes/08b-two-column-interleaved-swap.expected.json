@@ -1,0 +1,78 @@
+{
+  "basics": {
+    "fullName": "Peyton Sample",
+    "headline": "Senior Site Reliability Engineer",
+    "email": "peyton.sample@example.org",
+    "phone": "+1-555-0293",
+    "location": "Sample Town",
+    "links": [
+      {
+        "label": "Portfolio",
+        "url": "https://example.org/peyton"
+      }
+    ]
+  },
+  "summary": "Site reliability engineer focused on automated incident remediation and multi-cluster Kubernetes networking at scale.",
+  "experience": [
+    {
+      "company": "Sample Industries",
+      "title": "Senior Site Reliability Engineer",
+      "location": "Sample Town",
+      "start": "2021-09",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Automated canary rollback controller reducing mean time to recovery by 55% across 90 production microservices.",
+        "Migrated ingress mesh to Envoy with zero-downtime certificate rotation."
+      ]
+    },
+    {
+      "company": "Placeholder Works",
+      "title": "Site Reliability Engineer",
+      "location": "Sample Town",
+      "start": "2018-07",
+      "end": "2021-08",
+      "current": false,
+      "bullets": [
+        "Built Prometheus federation pipeline aggregating 1.4 million active time series."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Sample College",
+      "degree": "Bachelor of Science in Computer Science",
+      "start": "2014-09",
+      "end": "2018-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Platform",
+      "items": [
+        "Kubernetes",
+        "Terraform",
+        "Envoy"
+      ]
+    },
+    {
+      "group": "Observability",
+      "items": [
+        "Prometheus",
+        "OpenTelemetry",
+        "Grafana"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": [
+    {
+      "path": "unslotted[0]",
+      "reason": "UNSLOTTED_CONTENT",
+      "excerpt": "English (Native), Mandarin (Conversational)"
+    }
+  ]
+}
+
