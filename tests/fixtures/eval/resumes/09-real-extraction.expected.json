@@ -1,0 +1,129 @@
+{
+    "basics": {
+        "fullName": "ALEX MORGAN",
+        "headline": "Software Engineer",
+        "email": "alex.morgan@example.org",
+        "phone": "+1 (555) 010-2847",
+        "location": "Portland, Oregon, USA",
+        "links": [
+            {
+                "label": "LinkedIn",
+                "url": "https://linkedin.com/in/alex-morgan-example"
+            }
+        ]
+    },
+    "summary": "Detail-oriented Software Engineer with 4 years of experience building web applications, developing backend services, and maintaining scalable software systems. Skilled in Python, JavaScript, database management, and API development. Strong problem- solving abilities with a focus on writing maintainable code and delivering reliable solutions.",
+    "experience": [
+        {
+            "company": "Northstar Digital Labs",
+            "title": "Software Engineer",
+            "location": "Portland, Oregon",
+            "start": "2023-01",
+            "end": null,
+            "current": true,
+            "bullets": [
+                "Developed and maintained backend services using Python and FastAPI.",
+                "Built REST APIs to support web and mobile application functionality.",
+                "Improved database query performance through indexing and query optimization.",
+                "Collaborated with designers and developers to deliver new product features.",
+                "Participated in code reviews, debugging, and technical documentation."
+            ]
+        },
+        {
+            "company": "Brightpath Technologies",
+            "title": "Junior Web Developer",
+            "location": "Salem, Oregon",
+            "start": "2021-06",
+            "end": "2022-12",
+            "current": false,
+            "bullets": [
+                "Developed responsive web pages using HTML, CSS, JavaScript, and React.",
+                "Integrated frontend components with backend REST APIs.",
+                "Fixed application bugs and improved website usability.",
+                "Assisted with database operations using PostgreSQL.",
+                "Worked with the development team using Git and Agile practices."
+            ]
+        }
+    ],
+    "projects": [
+        {
+            "name": "TaskFlow",
+            "url": null,
+            "bullets": [
+                "Developed a task management application with user authentication and task tracking.",
+                "Built backend APIs using Python and FastAPI.",
+                "Used PostgreSQL for persistent data storage."
+            ]
+        },
+        {
+            "name": "Weather Dashboard",
+            "url": null,
+            "bullets": [
+                "Created a responsive weather dashboard using React.",
+                "Integrated a public weather API to display current conditions and forecasts."
+            ]
+        }
+    ],
+    "education": [
+        {
+            "school": "Westbridge University",
+            "degree": "Bachelor of Science in Computer Science",
+            "start": "2017",
+            "end": "2021"
+        }
+    ],
+    "skills": [
+        {
+            "group": "Programming Languages",
+            "items": [
+                "Python",
+                "JavaScript",
+                "SQL"
+            ]
+        },
+        {
+            "group": "Backend",
+            "items": [
+                "FastAPI",
+                "Node.js",
+                "REST APIs"
+            ]
+        },
+        {
+            "group": "Frontend",
+            "items": [
+                "React",
+                "HTML5",
+                "CSS3"
+            ]
+        },
+        {
+            "group": "Databases",
+            "items": [
+                "PostgreSQL",
+                "MySQL"
+            ]
+        },
+        {
+            "group": "Tools",
+            "items": [
+                "Git",
+                "GitHub",
+                "Docker",
+                "VS Code"
+            ]
+        },
+        {
+            "group": "Concepts",
+            "items": [
+                "Object-Oriented Programming",
+                "API Integration",
+                "Debugging",
+                "Agile Development"
+            ]
+        }
+    ],
+    "warnings": [],
+    "low_confidence_paths": [],
+    "review_flags": []
+}
