@@ -1,0 +1,82 @@
+{
+  "basics": {
+    "fullName": "Harper Fictional",
+    "headline": "Senior Distributed Systems Engineer",
+    "email": "harper.fictional@example.org",
+    "phone": "+1-555-0162",
+    "location": "Example City",
+    "links": [
+      {
+        "label": "Portfolio",
+        "url": "https://example.org/harper"
+      }
+    ]
+  },
+  "summary": "Designed high-throughput storage engines and low-latency replication services across multi-region clusters.",
+  "experience": [
+    {
+      "company": "Example Corp",
+      "title": "Senior Distributed Systems Engineer",
+      "location": "Example City",
+      "start": "2020-08",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Architected raft-based metadata service handling 120,000 requests per second with sub-millisecond read latency.",
+        "Reduced cross-region snapshot transfer bandwidth by 42% using content-defined chunking."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Example University",
+      "degree": "Bachelor of Science in Computer Science",
+      "start": "2016-09",
+      "end": "2020-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Systems",
+      "items": [
+        "Go",
+        "Rust",
+        "PostgreSQL"
+      ]
+    },
+    {
+      "group": "Infrastructure",
+      "items": [
+        "Kubernetes",
+        "Linux",
+        "Prometheus"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": [
+    {
+      "path": "unslotted[0]",
+      "reason": "UNSLOTTED_CONTENT",
+      "excerpt": "Mentor at Example City Youth Coding Guild (2021 - 2024), teaching weekend algorithms workshops."
+    },
+    {
+      "path": "unslotted[1]",
+      "reason": "UNSLOTTED_CONTENT",
+      "excerpt": "Recipient of the Example Corp Engineering Excellence Award for storage reliability."
+    },
+    {
+      "path": "unslotted[2]",
+      "reason": "UNSLOTTED_CONTENT",
+      "excerpt": "English (Native), Spanish (Professional Working), Japanese (Conversational)"
+    },
+    {
+      "path": "unslotted[3]",
+      "reason": "UNSLOTTED_CONTENT",
+      "excerpt": "Amateur packet radio, alpine trail running, mechanical clock restoration"
+    }
+  ]
+}
+

@@ -1,0 +1,73 @@
+{
+  "basics": {
+    "fullName": "Blake Mock",
+    "headline": "Staff Platform Engineer",
+    "email": "blake.mock@example.org",
+    "phone": "+1-555-0273",
+    "location": "Sample Town",
+    "links": [
+      {
+        "label": "Website",
+        "url": "https://example.org/blake"
+      }
+    ]
+  },
+  "summary": "Built multi-tenant container scheduling platforms and zero-downtime network control planes across regional clusters.",
+  "experience": [
+    {
+      "company": "Sample Industries",
+      "title": "Staff Platform Engineer",
+      "location": "Sample Town",
+      "start": "2021-02",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Designed automated node provisioning controller reducing cluster scale-up latency by 52%.",
+        "Implemented eBPF packet filtering policies across 4,000 production hosts."
+      ]
+    },
+    {
+      "company": "Synthetic Systems",
+      "title": "Backend Infrastructure Engineer",
+      "location": "Sample Town",
+      "start": "2018-05",
+      "end": "2021-01",
+      "current": false,
+      "bullets": [
+        "Built high-throughput log ingestion service processing 60TB of telemetry daily.",
+        "Automated database backup verification workflows cutting recovery test duration by 65%."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Sample College",
+      "degree": "Bachelor of Science in Software Engineering",
+      "start": "2014-09",
+      "end": "2018-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Platform",
+      "items": [
+        "Kubernetes",
+        "Linux",
+        "Terraform"
+      ]
+    },
+    {
+      "group": "Languages",
+      "items": [
+        "Go",
+        "C",
+        "Python"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}
+

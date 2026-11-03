@@ -1,0 +1,73 @@
+{
+  "basics": {
+    "fullName": "Avery Placeholder",
+    "headline": "Staff Platform Engineer",
+    "email": "avery.placeholder@example.org",
+    "phone": "+1-555-0173",
+    "location": "Example City",
+    "links": [
+      {
+        "label": "Website",
+        "url": "https://example.org/avery"
+      }
+    ]
+  },
+  "summary": "Built multi-tenant container scheduling platforms and zero-downtime network control planes across regional clusters.",
+  "experience": [
+    {
+      "company": "Example Corp",
+      "title": "Staff Platform Engineer",
+      "location": "Example City",
+      "start": "2021-02",
+      "end": null,
+      "current": true,
+      "bullets": [
+        "Designed automated node provisioning controller reducing cluster scale-up latency by 52%.",
+        "Implemented eBPF packet filtering policies across 4,000 production hosts."
+      ]
+    },
+    {
+      "company": "Fictional Labs",
+      "title": "Backend Infrastructure Engineer",
+      "location": "Example City",
+      "start": "2018-05",
+      "end": "2021-01",
+      "current": false,
+      "bullets": [
+        "Built high-throughput log ingestion service processing 60TB of telemetry daily.",
+        "Automated database backup verification workflows cutting recovery test duration by 65%."
+      ]
+    }
+  ],
+  "projects": [],
+  "education": [
+    {
+      "school": "Example University",
+      "degree": "Bachelor of Science in Software Engineering",
+      "start": "2014-09",
+      "end": "2018-05"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Platform",
+      "items": [
+        "Kubernetes",
+        "Linux",
+        "Terraform"
+      ]
+    },
+    {
+      "group": "Languages",
+      "items": [
+        "Go",
+        "C",
+        "Python"
+      ]
+    }
+  ],
+  "warnings": [],
+  "low_confidence_paths": [],
+  "review_flags": []
+}
+
