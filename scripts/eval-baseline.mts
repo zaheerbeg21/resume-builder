@@ -8,7 +8,8 @@
  * - Dates (start, end) are compared as written (exact match after trimming).
  * - Link labels (basics.links[i].label) are ignored; only basics.links[i].url is compared.
  * - id, warnings, and low_confidence_paths are ignored in field accuracy scoring.
- * - review_flags with reason UNSLOTTED_CONTENT are compared by path and excerpt (after trim) at
+ * - review_flags with reason UNSLOTTED_CONTENT are compared by path and excerpt (after trim and
+ *   collapsing runs of whitespace to one space) at
  *   review_flags[i]; missing flags count as wrong and null, and surplus UNSLOTTED_CONTENT flags
  *   count as surplus. EXCEEDS_LENGTH_LIMIT flags are ignored unless listed in expected.
  * - A null (or equivalent empty string) counts as wrong only when the expected value is non-null.
@@ -21,8 +22,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveGeminiModel } from '../lib/ai/config';
-import { ParseError, parseResume } from '../lib/ai/parsers/resume-parser';
-import { ProviderError } from '../lib/ai/provider';
+import { parseResume } from '../lib/ai/parsers/resume-parser';
 import { GeminiProvider } from '../lib/ai/providers/gemini';
 import { ResumeImportDraftSchema, type ResumeImportDraft } from '../lib/ai/schemas';
 
@@ -33,7 +33,7 @@ const FIXTURES_DIR = path.join(
   'eval',
   'resumes',
 );
-const DEFAULT_PAUSE_BETWEEN_CALLS_MS = 1000;
+const DEFAULT_PAUSE_BETWEEN_CALLS_MS = 4500;
 
 interface ExpectedBasics {
   fullName?: string | null;
@@ -120,8 +120,39 @@ interface FixtureEvalMetrics {
   pathOutcomes: Map<string, PathOutcome>;
 }
 
+interface ProviderErrorLike {
+  name?: string;
+  kind: string;
+  provider: unknown;
+  status?: number;
+}
+
+interface ParseErrorLike {
+  name?: string;
+  code: string;
+}
+
+function isProviderErrorLike(err: unknown): err is ProviderErrorLike {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'kind' in err &&
+    typeof (err as { kind?: unknown }).kind === 'string' &&
+    'provider' in err
+  );
+}
+
+function isParseErrorLike(err: unknown): err is ParseErrorLike {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    typeof (err as { code?: unknown }).code === 'string'
+  );
+}
+
 function classifyFailure(err: unknown): FailureCategory {
-  if (err instanceof ProviderError) {
+  if (isProviderErrorLike(err)) {
     if (err.kind === 'timeout') {
       return 'timeout';
     }
@@ -141,7 +172,7 @@ function classifyFailure(err: unknown): FailureCategory {
       return 'schema_validation';
     }
   }
-  if (err instanceof ParseError && err.code === 'empty_input') {
+  if (isParseErrorLike(err) && err.code === 'empty_input') {
     return 'empty_input';
   }
   return 'other';
@@ -152,29 +183,46 @@ function formatErrorOneLine(err: unknown): {
   firstLine: string;
   extra: string;
 } {
-  const name = err instanceof Error ? err.name : 'NonErrorThrown';
+  if (isProviderErrorLike(err)) {
+    const name =
+      typeof err.name === 'string' && err.name.length > 0
+        ? err.name
+        : 'ProviderError';
+    const statusText = typeof err.status === 'number' ? err.status : 'none';
+    return {
+      name,
+      firstLine: `kind=${err.kind} status=${statusText}`,
+      extra: '',
+    };
+  }
+  if (isParseErrorLike(err)) {
+    const name =
+      typeof err.name === 'string' && err.name.length > 0
+        ? err.name
+        : 'ParseError';
+    return {
+      name,
+      firstLine: `code=${err.code}`,
+      extra: '',
+    };
+  }
+
+  const errObj =
+    typeof err === 'object' && err !== null
+      ? (err as { name?: unknown; message?: unknown })
+      : null;
+  const name =
+    errObj && typeof errObj.name === 'string' && errObj.name.length > 0
+      ? errObj.name
+      : 'NonErrorThrown';
   const rawMessage =
-    err instanceof Error
-      ? err.message
+    errObj && typeof errObj.message === 'string'
+      ? errObj.message
       : typeof err === 'string'
       ? err
       : 'unhandled error';
   const firstLine = (rawMessage.split(/\r?\n/)[0] ?? '').trim();
 
-  if (err instanceof ProviderError) {
-    return {
-      name,
-      firstLine,
-      extra: `kind=${err.kind} status=${err.status ?? 'none'}`,
-    };
-  }
-  if (err instanceof ParseError) {
-    return {
-      name,
-      firstLine,
-      extra: `code=${err.code}`,
-    };
-  }
   return { name, firstLine, extra: '' };
 }
 
@@ -224,6 +272,16 @@ function normalizeStringValue(value: string | null | undefined): string | null {
   }
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function normalizeReviewFlagExcerpt(
+  value: string | null | undefined,
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const collapsed = value.trim().replace(/\s+/g, ' ');
+  return collapsed.length === 0 ? null : collapsed;
 }
 
 class FieldAccumulator {
@@ -463,7 +521,7 @@ function evaluateDraft(
     const expFlag = expFlags[i];
     const flagPath = `review_flags[${i}]`;
     const expPathTrimmed = expFlag.path.trim();
-    const expExcerptTrimmed = (expFlag.excerpt ?? '').trim();
+    const expExcerptNormalized = normalizeReviewFlagExcerpt(expFlag.excerpt);
 
     if (expFlag.reason === 'UNSLOTTED_CONTENT') {
       let matchIdx = actFlags.findIndex(
@@ -471,7 +529,7 @@ function evaluateDraft(
           !consumedActualFlags.has(idx) &&
           af.reason === 'UNSLOTTED_CONTENT' &&
           af.path.trim() === expPathTrimmed &&
-          (af.excerpt ?? '').trim() === expExcerptTrimmed,
+          normalizeReviewFlagExcerpt(af.excerpt) === expExcerptNormalized,
       );
       if (matchIdx === -1) {
         matchIdx = actFlags.findIndex(
@@ -493,8 +551,8 @@ function evaluateDraft(
         consumedActualFlags.add(matchIdx);
         acc.compareString(
           flagPath,
-          expFlag.excerpt ?? null,
-          actFlags[matchIdx].excerpt ?? null,
+          expExcerptNormalized,
+          normalizeReviewFlagExcerpt(actFlags[matchIdx].excerpt),
         );
       }
     } else if (expFlag.reason === 'EXCEEDS_LENGTH_LIMIT') {
@@ -516,8 +574,8 @@ function evaluateDraft(
         if (expFlag.excerpt !== undefined) {
           acc.compareString(
             flagPath,
-            expFlag.excerpt,
-            actFlags[matchIdx].excerpt ?? null,
+            expExcerptNormalized,
+            normalizeReviewFlagExcerpt(actFlags[matchIdx].excerpt),
           );
         } else {
           acc.total += 1;
@@ -889,11 +947,62 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
     );
   }
 
-  const syntheticTimeout = new ProviderError('synthetic', {
+  const actualWithNewlineExcerpt = expectedToDraft(expected);
+  actualWithNewlineExcerpt.review_flags[0].excerpt = (
+    actualWithNewlineExcerpt.review_flags[0].excerpt ?? ''
+  ).replace(' ', '\n  ');
+  const newlineMetrics = evaluateDraft(
+    'self-check-newline-excerpt',
+    expected,
+    actualWithNewlineExcerpt,
+    [],
+    [],
+    0,
+    configuredModel,
+  );
+  if (newlineMetrics.wrong !== 0) {
+    throw new Error(
+      `Expected newline excerpt probe wrong=0 but got wrong=${newlineMetrics.wrong}`,
+    );
+  }
+
+  const actualWithChangedWordExcerpt = expectedToDraft(expected);
+  actualWithChangedWordExcerpt.review_flags[0].excerpt = `${
+    actualWithChangedWordExcerpt.review_flags[0].excerpt ?? ''
+  } alteredword`;
+  const changedWordMetrics = evaluateDraft(
+    'self-check-changed-word-excerpt',
+    expected,
+    actualWithChangedWordExcerpt,
+    [],
+    [],
+    0,
+    configuredModel,
+  );
+  console.log(
+    `[self-check-excerpt-whitespace] newlineWrong=${newlineMetrics.wrong} changedWordWrong=${changedWordMetrics.wrong} changedWordWrongPaths=${JSON.stringify(changedWordMetrics.wrongPaths)}`,
+  );
+  if (
+    changedWordMetrics.wrong !== 1 ||
+    changedWordMetrics.wrongPaths[0] !== 'review_flags[0]'
+  ) {
+    throw new Error(
+      `Expected changed-word excerpt probe wrong=1 at review_flags[0] but got wrong=${changedWordMetrics.wrong} paths=${JSON.stringify(changedWordMetrics.wrongPaths)}`,
+    );
+  }
+
+  const syntheticTimeout = {
+    name: 'ProviderError',
     kind: 'timeout',
     provider: 'gemini',
-  });
-  const syntheticMetrics: FixtureEvalMetrics = {
+  };
+  const synthetic429 = {
+    name: 'ProviderError',
+    kind: 'api',
+    provider: 'gemini',
+    status: 429,
+  };
+  const syntheticTimeoutMetrics: FixtureEvalMetrics = {
     fixture: 'self-check-synthetic-timeout',
     failed: true,
     failureCategory: classifyFailure(syntheticTimeout),
@@ -910,9 +1019,30 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
     warningsCount: 0,
     pathOutcomes: new Map(),
   };
-  const counts = reportFailureCounts([[syntheticMetrics]]);
-  if (counts.timeout !== 1) {
-    throw new Error(`Expected synthetic timeout=1 but got ${counts.timeout}`);
+  const synthetic429Metrics: FixtureEvalMetrics = {
+    fixture: 'self-check-synthetic-429',
+    failed: true,
+    failureCategory: classifyFailure(synthetic429),
+    total: 0,
+    correct: 0,
+    wrong: 0,
+    nullCount: 0,
+    latencyMs: 0,
+    wrongPaths: [],
+    nullPaths: [],
+    surplusPaths: [],
+    provenanceNulledPaths: [],
+    provenanceDecoupledRoles: [],
+    warningsCount: 0,
+    pathOutcomes: new Map(),
+  };
+  const counts = reportFailureCounts([
+    [syntheticTimeoutMetrics, synthetic429Metrics],
+  ]);
+  if (counts.timeout !== 1 || counts.api_429 !== 1) {
+    throw new Error(
+      `Expected synthetic timeout=1 and api_429=1 but got timeout=${counts.timeout} api_429=${counts.api_429}`,
+    );
   }
 }
 
