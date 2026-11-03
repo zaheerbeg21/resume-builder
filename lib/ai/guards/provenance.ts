@@ -56,6 +56,9 @@ const MONTH_NAMES: Record<string, string> = {
 const ENGLISH_MONTHS_PATTERN =
   '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember))';
 const DATE_TOKEN_PATTERN = `(?:(?:0?[1-9]|1[0-2])\\/\\d{4}|\\d{4}-(?:0[1-9]|1[0-2])|\\d{4}|${ENGLISH_MONTHS_PATTERN}\\s+\\d{4})`;
+const DATE_RANGE_PATTERN = `(\\b${DATE_TOKEN_PATTERN}\\b)\\s*(?:-|–|—|\\bto\\b)\\s*(\\b(?:${DATE_TOKEN_PATTERN}|Present)\\b)`;
+const dateRangeLineRegex = new RegExp(DATE_RANGE_PATTERN, 'i');
+const dateTokenLineRegex = new RegExp(`\\b${DATE_TOKEN_PATTERN}\\b`, 'i');
 
 function parseDateToken(raw: string): string | null {
   const trimmed = raw.trim();
@@ -313,6 +316,7 @@ export function guardProvenance(
     }
   }
 
+  let prevRoleLastLine = -1;
   const newExperience = draft.experience.map((exp, i) => {
     const anchorInfo = expAnchors[i];
     const company = anchorInfo.company;
@@ -342,26 +346,53 @@ export function guardProvenance(
     let end = exp.end;
     let current = exp.current;
 
-    // Locate role's date line
-    let dateLineIdx = -1;
     const anchorLine = anchorInfo.anchorLine;
-    const searchAnchor = anchorLine !== -1 ? anchorLine : 0;
-    const searchWindowEnd = Math.min(sourceLines.length, searchAnchor + SPATIAL_WINDOW_LINES + DATE_SEARCH_MARGIN_LINES);
-    for (let l = Math.max(0, searchAnchor - DATE_SEARCH_MARGIN_LINES); l < searchWindowEnd; l++) {
-      if (exp.start && isGroundedSubstring(exp.start, sourceLines[l])) {
-        dateLineIdx = l;
+    let roleEndLine = sourceLines.length;
+    for (let k = i + 1; k < expAnchors.length; k++) {
+      if (expAnchors[k].anchorLine !== -1) {
+        roleEndLine = expAnchors[k].anchorLine;
         break;
       }
-      if (/present/i.test(sourceLines[l]) || /現在/.test(sourceLines[l])) {
-        dateLineIdx = l;
-        break;
+    }
+
+    // Locate role's date line
+    let dateLineIdx = -1;
+    const searchAnchor = anchorLine !== -1 ? anchorLine : 0;
+    const searchWindowStart = Math.max(
+      prevRoleLastLine + 1,
+      searchAnchor - DATE_SEARCH_MARGIN_LINES,
+    );
+    const searchWindowEnd = Math.min(
+      roleEndLine,
+      searchAnchor + SPATIAL_WINDOW_LINES + DATE_SEARCH_MARGIN_LINES,
+    );
+    if (exp.start) {
+      for (let l = searchWindowStart; l < searchWindowEnd; l++) {
+        if (isGroundedSubstring(exp.start, sourceLines[l])) {
+          dateLineIdx = l;
+          break;
+        }
+      }
+    }
+    if (dateLineIdx === -1) {
+      for (let l = searchWindowStart; l < searchWindowEnd; l++) {
+        if (
+          dateRangeLineRegex.test(sourceLines[l]) ||
+          dateTokenLineRegex.test(sourceLines[l])
+        ) {
+          dateLineIdx = l;
+          break;
+        }
       }
     }
 
     if (end !== null) {
       if (/^present$/i.test(end.trim())) {
         const dateLineText = dateLineIdx !== -1 ? sourceLines[dateLineIdx] : '';
-        if (/\bpresent\b/i.test(dateLineText)) {
+        if (
+          dateRangeLineRegex.test(dateLineText) &&
+          /\bpresent\b/i.test(dateLineText)
+        ) {
           end = null;
           current = true;
         } else {
@@ -396,13 +427,6 @@ export function guardProvenance(
     const validBullets: string[] = [];
     if (anchorLine !== -1) {
       const roleStartLine = anchorLine;
-      let roleEndLine = sourceLines.length;
-      for (let k = i + 1; k < expAnchors.length; k++) {
-        if (expAnchors[k].anchorLine !== -1) {
-          roleEndLine = expAnchors[k].anchorLine;
-          break;
-        }
-      }
       const roleRegion = sourceLines.slice(roleStartLine, roleEndLine).join('\n');
 
       exp.bullets.forEach((bullet, j) => {
@@ -418,6 +442,13 @@ export function guardProvenance(
         nulledPaths.push(`experience[${i}].bullets[${j}]`);
       });
     }
+
+    prevRoleLastLine = Math.max(
+      prevRoleLastLine,
+      companyLineIdx,
+      titleLineIdx,
+      dateLineIdx,
+    );
 
     return {
       ...exp,
@@ -562,10 +593,7 @@ export function guardProvenance(
   });
 
   // 7. Unmapped date ranges detection
-  const rangePattern = new RegExp(
-    `(\\b${DATE_TOKEN_PATTERN}\\b)\\s*(?:-|–|—|\\bto\\b)\\s*(\\b(?:${DATE_TOKEN_PATTERN}|Present)\\b)`,
-    'gi'
-  );
+  const rangePattern = new RegExp(DATE_RANGE_PATTERN, 'gi');
 
   const allAssignedDates: string[] = [];
   draft.experience.forEach((e) => {
