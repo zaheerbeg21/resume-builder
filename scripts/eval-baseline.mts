@@ -7,7 +7,10 @@
  *   string ('') counts as null.
  * - Dates (start, end) are compared as written (exact match after trimming).
  * - Link labels (basics.links[i].label) are ignored; only basics.links[i].url is compared.
- * - id, warnings, low_confidence_paths, and review_flags are ignored in field accuracy scoring.
+ * - id, warnings, and low_confidence_paths are ignored in field accuracy scoring.
+ * - review_flags with reason UNSLOTTED_CONTENT are compared by path and excerpt (after trim) at
+ *   review_flags[i]; missing flags count as wrong and null, and surplus UNSLOTTED_CONTENT flags
+ *   count as surplus. EXCEEDS_LENGTH_LIMIT flags are ignored unless listed in expected.
  * - A null (or equivalent empty string) counts as wrong only when the expected value is non-null.
  * - Expected '' (or null) vs actual non-empty is counted as wrong (e.g. negative-control fixtures).
  * - Extra array items in actual beyond expected length count as wrong at their index path and are
@@ -69,6 +72,13 @@ interface ExpectedSkillGroup {
   items?: string[];
 }
 
+interface ExpectedReviewFlag {
+  path: string;
+  reason: 'EXCEEDS_LENGTH_LIMIT' | 'UNSLOTTED_CONTENT';
+  message?: string;
+  excerpt?: string | null;
+}
+
 interface ExpectedDraft {
   basics?: ExpectedBasics;
   summary?: string | null;
@@ -76,10 +86,19 @@ interface ExpectedDraft {
   projects?: ExpectedProjectItem[];
   education?: ExpectedEducationItem[];
   skills?: ExpectedSkillGroup[];
+  review_flags?: ExpectedReviewFlag[];
 }
 
 type PathOutcome = 'correct' | 'wrong' | 'wrong_null' | 'surplus';
-type FailureCategory = 'timeout' | 'api_429' | 'api_503' | 'other';
+type FailureCategory =
+  | 'timeout'
+  | 'api_429'
+  | 'api_503'
+  | 'api_other'
+  | 'empty_response'
+  | 'schema_validation'
+  | 'empty_input'
+  | 'other';
 
 interface FixtureEvalMetrics {
   fixture: string;
@@ -106,12 +125,24 @@ function classifyFailure(err: unknown): FailureCategory {
     if (err.kind === 'timeout') {
       return 'timeout';
     }
-    if (err.kind === 'api' && err.status === 429) {
-      return 'api_429';
+    if (err.kind === 'api') {
+      if (err.status === 429) {
+        return 'api_429';
+      }
+      if (err.status === 503) {
+        return 'api_503';
+      }
+      return 'api_other';
     }
-    if (err.kind === 'api' && err.status === 503) {
-      return 'api_503';
+    if (err.kind === 'empty_response') {
+      return 'empty_response';
     }
+    if (err.kind === 'schema_validation') {
+      return 'schema_validation';
+    }
+  }
+  if (err instanceof ParseError && err.code === 'empty_input') {
+    return 'empty_input';
   }
   return 'other';
 }
@@ -421,6 +452,97 @@ function evaluateDraft(
     acc.recordSurplus(`skills[${i}]`);
   }
 
+  const expFlags = expected.review_flags ?? [];
+  const actFlags = actual.review_flags ?? [];
+  const consumedActualFlags = new Set<number>();
+  const expectsLengthLimitFlags = expFlags.some(
+    (f) => f.reason === 'EXCEEDS_LENGTH_LIMIT',
+  );
+
+  for (let i = 0; i < expFlags.length; i++) {
+    const expFlag = expFlags[i];
+    const flagPath = `review_flags[${i}]`;
+    const expPathTrimmed = expFlag.path.trim();
+    const expExcerptTrimmed = (expFlag.excerpt ?? '').trim();
+
+    if (expFlag.reason === 'UNSLOTTED_CONTENT') {
+      let matchIdx = actFlags.findIndex(
+        (af, idx) =>
+          !consumedActualFlags.has(idx) &&
+          af.reason === 'UNSLOTTED_CONTENT' &&
+          af.path.trim() === expPathTrimmed &&
+          (af.excerpt ?? '').trim() === expExcerptTrimmed,
+      );
+      if (matchIdx === -1) {
+        matchIdx = actFlags.findIndex(
+          (af, idx) =>
+            !consumedActualFlags.has(idx) &&
+            af.reason === 'UNSLOTTED_CONTENT' &&
+            af.path.trim() === expPathTrimmed,
+        );
+      }
+
+      if (matchIdx === -1) {
+        acc.total += 1;
+        acc.wrong += 1;
+        acc.nullCount += 1;
+        acc.wrongPaths.push(flagPath);
+        acc.nullPaths.push(flagPath);
+        acc.pathOutcomes.set(flagPath, 'wrong_null');
+      } else {
+        consumedActualFlags.add(matchIdx);
+        acc.compareString(
+          flagPath,
+          expFlag.excerpt ?? null,
+          actFlags[matchIdx].excerpt ?? null,
+        );
+      }
+    } else if (expFlag.reason === 'EXCEEDS_LENGTH_LIMIT') {
+      const matchIdx = actFlags.findIndex(
+        (af, idx) =>
+          !consumedActualFlags.has(idx) &&
+          af.reason === 'EXCEEDS_LENGTH_LIMIT' &&
+          af.path.trim() === expPathTrimmed,
+      );
+      if (matchIdx === -1) {
+        acc.total += 1;
+        acc.wrong += 1;
+        acc.nullCount += 1;
+        acc.wrongPaths.push(flagPath);
+        acc.nullPaths.push(flagPath);
+        acc.pathOutcomes.set(flagPath, 'wrong_null');
+      } else {
+        consumedActualFlags.add(matchIdx);
+        if (expFlag.excerpt !== undefined) {
+          acc.compareString(
+            flagPath,
+            expFlag.excerpt,
+            actFlags[matchIdx].excerpt ?? null,
+          );
+        } else {
+          acc.total += 1;
+          acc.correct += 1;
+          acc.pathOutcomes.set(flagPath, 'correct');
+        }
+      }
+    }
+  }
+
+  let surplusFlagIdx = expFlags.length;
+  for (let idx = 0; idx < actFlags.length; idx++) {
+    if (consumedActualFlags.has(idx)) {
+      continue;
+    }
+    const af = actFlags[idx];
+    if (
+      af.reason === 'UNSLOTTED_CONTENT' ||
+      (af.reason === 'EXCEEDS_LENGTH_LIMIT' && expectsLengthLimitFlags)
+    ) {
+      acc.recordSurplus(`review_flags[${surplusFlagIdx}]`);
+      surplusFlagIdx += 1;
+    }
+  }
+
   return {
     fixture,
     failed: false,
@@ -516,7 +638,12 @@ function expectedToDraft(expected: ExpectedDraft): ResumeImportDraft {
     })),
     warnings: [],
     low_confidence_paths: [],
-    review_flags: [],
+    review_flags: (expected.review_flags ?? []).map((rf) => ({
+      path: rf.path,
+      reason: rf.reason,
+      ...(rf.message !== undefined ? { message: rf.message } : {}),
+      ...(rf.excerpt !== undefined ? { excerpt: rf.excerpt } : {}),
+    })),
   });
 }
 
@@ -709,11 +836,17 @@ function reportMultiRunDiffs(allRuns: FixtureEvalMetrics[][]): void {
   }
 }
 
-function reportFailureCounts(allRuns: FixtureEvalMetrics[][]): void {
+function reportFailureCounts(
+  allRuns: FixtureEvalMetrics[][],
+): Record<FailureCategory, number> {
   const counts: Record<FailureCategory, number> = {
     timeout: 0,
     api_429: 0,
     api_503: 0,
+    api_other: 0,
+    empty_response: 0,
+    schema_validation: 0,
+    empty_input: 0,
     other: 0,
   };
   for (const run of allRuns) {
@@ -725,8 +858,62 @@ function reportFailureCounts(allRuns: FixtureEvalMetrics[][]): void {
     }
   }
   console.log(
-    `[failure-counts] timeout=${counts.timeout} api_429=${counts.api_429} api_503=${counts.api_503} other=${counts.other}`,
+    `[failure-counts] timeout=${counts.timeout} api_429=${counts.api_429} api_503=${counts.api_503} api_other=${counts.api_other} empty_response=${counts.empty_response} schema_validation=${counts.schema_validation} empty_input=${counts.empty_input} other=${counts.other}`,
   );
+  return counts;
+}
+
+async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> {
+  const expectedRaw = await fs.readFile(
+    path.join(FIXTURES_DIR, '06-extra-sections.expected.json'),
+    'utf8',
+  );
+  const expected = JSON.parse(expectedRaw) as ExpectedDraft;
+  const actualWithMissingFlag = expectedToDraft(expected);
+  actualWithMissingFlag.review_flags.pop();
+  const missingFlagMetrics = evaluateDraft(
+    'self-check-missing-review-flag',
+    expected,
+    actualWithMissingFlag,
+    [],
+    [],
+    0,
+    configuredModel,
+  );
+  console.log(
+    `[self-check-missing-flag] total=${missingFlagMetrics.total} correct=${missingFlagMetrics.correct} wrong=${missingFlagMetrics.wrong} null=${missingFlagMetrics.nullCount} wrongPaths=${JSON.stringify(missingFlagMetrics.wrongPaths)} nullPaths=${JSON.stringify(missingFlagMetrics.nullPaths)}`,
+  );
+  if (missingFlagMetrics.wrong !== 1 || missingFlagMetrics.nullCount !== 1) {
+    throw new Error(
+      `Expected missing flag probe wrong=1 null=1 but got wrong=${missingFlagMetrics.wrong} null=${missingFlagMetrics.nullCount}`,
+    );
+  }
+
+  const syntheticTimeout = new ProviderError('synthetic', {
+    kind: 'timeout',
+    provider: 'gemini',
+  });
+  const syntheticMetrics: FixtureEvalMetrics = {
+    fixture: 'self-check-synthetic-timeout',
+    failed: true,
+    failureCategory: classifyFailure(syntheticTimeout),
+    total: 0,
+    correct: 0,
+    wrong: 0,
+    nullCount: 0,
+    latencyMs: 0,
+    wrongPaths: [],
+    nullPaths: [],
+    surplusPaths: [],
+    provenanceNulledPaths: [],
+    provenanceDecoupledRoles: [],
+    warningsCount: 0,
+    pathOutcomes: new Map(),
+  };
+  const counts = reportFailureCounts([[syntheticMetrics]]);
+  if (counts.timeout !== 1) {
+    throw new Error(`Expected synthetic timeout=1 but got ${counts.timeout}`);
+  }
 }
 
 async function discoverFixtureTxtFiles(): Promise<string[]> {
@@ -783,7 +970,11 @@ async function main(): Promise<void> {
   }
 
   reportMultiRunDiffs(allRuns);
-  reportFailureCounts(allRuns);
+  if (selfCheck) {
+    await runSelfCheckFailureProbe(configuredModel);
+  } else {
+    reportFailureCounts(allRuns);
+  }
 }
 
 main().catch((err: unknown) => {
