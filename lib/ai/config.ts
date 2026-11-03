@@ -1,4 +1,5 @@
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';// 
+// export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';// 
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 export const REQUEST_TIMEOUT_MS = 15_000; // starting value, tuned on corpus
 export const TEMPERATURE = 0;
 
