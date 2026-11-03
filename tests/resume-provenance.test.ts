@@ -25,89 +25,89 @@ function createFictionalDraft(
 ): ResumeImportDraft {
   const base: ResumeImportDraft = options.minimal
     ? {
-        basics: {
-          fullName: null,
-          headline: '',
-          email: null,
-          phone: null,
-          location: '',
-          links: [],
-        },
-        summary: '',
-        experience: [],
-        projects: [],
-        education: [],
-        skills: [],
-        warnings: [],
-        low_confidence_paths: [],
-        review_flags: [],
-      }
+      basics: {
+        fullName: null,
+        headline: '',
+        email: null,
+        phone: null,
+        location: '',
+        links: [],
+      },
+      summary: '',
+      experience: [],
+      projects: [],
+      education: [],
+      skills: [],
+      warnings: [],
+      low_confidence_paths: [],
+      review_flags: [],
+    }
     : {
-        basics: {
-          fullName: 'Alex Example',
-          headline: 'Lead Developer',
-          email: 'alex@example.org',
-          phone: '+1-555-0100',
+      basics: {
+        fullName: 'Alex Example',
+        headline: 'Lead Developer',
+        email: 'alex@example.org',
+        phone: '+1-555-0100',
+        location: 'Example City',
+        links: [
+          { label: 'Website', url: 'https://example.org/alex' },
+        ],
+      },
+      summary: 'Experienced software engineer specializing in scalable backend systems.',
+      experience: [
+        {
+          id: 'exp-1',
+          company: 'Example Corp',
+          title: 'Lead Developer',
           location: 'Example City',
-          links: [
-            { label: 'Website', url: 'https://example.org/alex' },
+          start: '2020-01',
+          end: null,
+          current: true,
+          bullets: [
+            'Built scalable distributed backend services with high uptime and resilient data stores.',
           ],
         },
-        summary: 'Experienced software engineer specializing in scalable backend systems.',
-        experience: [
-          {
-            id: 'exp-1',
-            company: 'Example Corp',
-            title: 'Lead Developer',
-            location: 'Example City',
-            start: '2020-01',
-            end: null,
-            current: true,
-            bullets: [
-              'Built scalable distributed backend services with high uptime and resilient data stores.',
-            ],
-          },
-        ],
-        projects: [
-          {
-            id: 'proj-1',
-            name: 'Project Alpha',
-            url: 'https://example.org/alpha',
-            bullets: [
-              'Engineered event-driven streaming pipeline processing high throughput events reliably.',
-            ],
-          },
-        ],
-        education: [
-          {
-            id: 'edu-1',
-            school: 'Example University',
-            degree: 'B.S. in Computer Science',
-            start: '2016-09',
-            end: '2020-05',
-          },
-        ],
-        skills: [
-          {
-            group: 'Programming',
-            items: ['TypeScript', 'Node.js', 'C++', 'C#'],
-          },
-        ],
-        warnings: [],
-        low_confidence_paths: [],
-        review_flags: [],
-      };
+      ],
+      projects: [
+        {
+          id: 'proj-1',
+          name: 'Project Alpha',
+          url: 'https://example.org/alpha',
+          bullets: [
+            'Engineered event-driven streaming pipeline processing high throughput events reliably.',
+          ],
+        },
+      ],
+      education: [
+        {
+          id: 'edu-1',
+          school: 'Example University',
+          degree: 'B.S. in Computer Science',
+          start: '2016-09',
+          end: '2020-05',
+        },
+      ],
+      skills: [
+        {
+          group: 'Programming',
+          items: ['TypeScript', 'Node.js', 'C++', 'C#'],
+        },
+      ],
+      warnings: [],
+      low_confidence_paths: [],
+      review_flags: [],
+    };
 
   return ResumeImportDraftSchema.parse({
     ...base,
     ...overrides,
     ...(options.minimal && overrides.basics
       ? {
-          basics: {
-            ...base.basics,
-            ...overrides.basics,
-          },
-        }
+        basics: {
+          ...base.basics,
+          ...overrides.basics,
+        },
+      }
       : {}),
   });
 }
@@ -1441,6 +1441,464 @@ ${longBullet}
     expect(resultDraft.experience[0].bullets).toEqual([roleBullet]);
     expect(report.nulledPaths).toEqual([]);
     expect(resultDraft.low_confidence_paths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('22. (1) two roles, first current (Present) and second with its own dates 3 lines after company/title: second role is not decoupled', () => {
+    const role0Bullet1 =
+      'Designed partitioned Kafka ingestion pipeline processing events with bounded consumer lag.';
+    const role0Bullet2 =
+      'Cut ClickHouse query tail latency by restructuring primary keys and materialized rollups.';
+    const role1Bullet =
+      'Built gRPC rate-limiting service enforcing per-tenant token buckets across edge clusters.';
+    const source = [
+      'Rowan Fictional',
+      'Staff Backend Engineer',
+      'rowan.fictional@example.org',
+      'EXPERIENCE',
+      'Example Corp | Example City',
+      'Staff Backend Engineer',
+      '2022-02 - Present',
+      '- Designed partitioned Kafka ingestion pipeline processing events',
+      'with bounded consumer lag.',
+      '- Cut ClickHouse query tail latency by restructuring primary keys',
+      'and materialized rollups.',
+      'Fictional Labs',
+      'Backend Engineer',
+      'Example City',
+      '2019-06 - 2022-01',
+      `- ${role1Bullet}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Rowan Fictional',
+          headline: 'Staff Backend Engineer',
+          email: 'rowan.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Staff Backend Engineer',
+            location: 'Example City',
+            start: '2022-02',
+            end: null,
+            current: true,
+            bullets: [role0Bullet1, role0Bullet2],
+          },
+          {
+            id: 'exp-2',
+            company: 'Fictional Labs',
+            title: 'Backend Engineer',
+            location: 'Example City',
+            start: '2019-06',
+            end: '2022-01',
+            current: false,
+            bullets: [role1Bullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { report } = guardProvenance(draft, source);
+
+    expect(report.nulledPaths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('23. (2) two roles with two sidebar lines between second role title and its dates (company-to-date distance equals SPATIAL_WINDOW_LINES): second role is not decoupled', () => {
+    expect(SPATIAL_WINDOW_LINES).toBe(4);
+    const role0Bullet1 =
+      'Automated canary rollback controller reducing recovery time across production microservices.';
+    const role0Bullet2 =
+      'Migrated ingress mesh to Envoy with zero-downtime certificate rotation.';
+    const role1Bullet =
+      'Built Prometheus federation pipeline aggregating active time series across clusters.';
+    const source = [
+      'Kendall Fictional',
+      'Senior Site Reliability Engineer',
+      'kendall.fictional@example.org',
+      'EXPERIENCE',
+      'Example Corp | Example City',
+      'Senior Site Reliability Engineer',
+      '2021-09 - Present',
+      '- Automated canary rollback controller reducing recovery time',
+      'across production microservices.',
+      '- Migrated ingress mesh to Envoy with zero-downtime',
+      'certificate rotation.',
+      'Fictional Systems | Example City',
+      'Site Reliability Engineer',
+      'LANGUAGES',
+      'English (Native), Mandarin (Conversational)',
+      '2018-07 - 2021-08',
+      `- ${role1Bullet}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Kendall Fictional',
+          headline: 'Senior Site Reliability Engineer',
+          email: 'kendall.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Senior Site Reliability Engineer',
+            location: 'Example City',
+            start: '2021-09',
+            end: null,
+            current: true,
+            bullets: [role0Bullet1, role0Bullet2],
+          },
+          {
+            id: 'exp-2',
+            company: 'Fictional Systems',
+            title: 'Site Reliability Engineer',
+            location: 'Example City',
+            start: '2018-07',
+            end: '2021-08',
+            current: false,
+            bullets: [role1Bullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { report } = guardProvenance(draft, source);
+
+    expect(report.nulledPaths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('24. (3) control: two roles with one extra sidebar line so company-to-date distance is SPATIAL_WINDOW_LINES + 1: second role is decoupled', () => {
+    expect(SPATIAL_WINDOW_LINES).toBe(4);
+    const role0Bullet1 =
+      'Automated canary rollback controller reducing recovery time across production microservices.';
+    const role0Bullet2 =
+      'Migrated ingress mesh to Envoy with zero-downtime certificate rotation.';
+    const role1Bullet =
+      'Built Prometheus federation pipeline aggregating active time series across clusters.';
+    const source = [
+      'Kendall Fictional',
+      'Senior Site Reliability Engineer',
+      'kendall.fictional@example.org',
+      'EXPERIENCE',
+      'Example Corp | Example City',
+      'Senior Site Reliability Engineer',
+      '2021-09 - Present',
+      '- Automated canary rollback controller reducing recovery time',
+      'across production microservices.',
+      '- Migrated ingress mesh to Envoy with zero-downtime',
+      'certificate rotation.',
+      'Fictional Systems | Example City',
+      'Site Reliability Engineer',
+      'LANGUAGES',
+      'English (Native)',
+      'Mandarin (Conversational)',
+      '2018-07 - 2021-08',
+      `- ${role1Bullet}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Kendall Fictional',
+          headline: 'Senior Site Reliability Engineer',
+          email: 'kendall.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Senior Site Reliability Engineer',
+            location: 'Example City',
+            start: '2021-09',
+            end: null,
+            current: true,
+            bullets: [role0Bullet1, role0Bullet2],
+          },
+          {
+            id: 'exp-2',
+            company: 'Fictional Systems',
+            title: 'Site Reliability Engineer',
+            location: 'Example City',
+            start: '2018-07',
+            end: '2021-08',
+            current: false,
+            bullets: [role1Bullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { report } = guardProvenance(draft, source);
+
+    expect(report.nulledPaths).toEqual([]);
+    expect(report.decoupledRoles).toEqual(['experience[1]']);
+  });
+
+  it('25. (4) three roles, current first, where middle role date line is far from its company: middle role is decoupled and does not latch onto either neighbour date', () => {
+    const role0Bullet =
+      'Automated canary rollback controller reducing recovery time across production microservices.';
+    const role1Bullet =
+      'Built Prometheus federation pipeline aggregating active time series across clusters.';
+    const role2Bullet =
+      'Maintained internal build tooling and deterministic release verification pipelines.';
+    const source = [
+      'Kendall Fictional',
+      'Senior Site Reliability Engineer',
+      'kendall.fictional@example.org',
+      'EXPERIENCE',
+      'Example Corp | Senior Site Reliability Engineer',
+      '2021-09 - Present',
+      `- ${role0Bullet}`,
+      'Fictional Systems',
+      'Site Reliability Engineer',
+      'SIDEBAR SKILLS',
+      'Kubernetes, Terraform, Envoy',
+      'Prometheus, OpenTelemetry, Grafana',
+      'Linux, Go, Python',
+      '2018-07 - 2021-08',
+      `- ${role1Bullet}`,
+      'Sample Works | Junior Systems Engineer',
+      '2016-06 - 2018-06',
+      `- ${role2Bullet}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Kendall Fictional',
+          headline: 'Senior Site Reliability Engineer',
+          email: 'kendall.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Senior Site Reliability Engineer',
+            start: '2021-09',
+            end: null,
+            current: true,
+            bullets: [role0Bullet],
+          },
+          {
+            id: 'exp-2',
+            company: 'Fictional Systems',
+            title: 'Site Reliability Engineer',
+            start: '2018-07',
+            end: '2021-08',
+            current: false,
+            bullets: [role1Bullet],
+          },
+          {
+            id: 'exp-3',
+            company: 'Sample Works',
+            title: 'Junior Systems Engineer',
+            start: '2016-06',
+            end: '2018-06',
+            current: false,
+            bullets: [role2Bullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { report } = guardProvenance(draft, source);
+
+    expect(report.nulledPaths).toEqual([]);
+    expect(report.decoupledRoles).toEqual(['experience[1]']);
+  });
+
+  it('26. (5) role whose own start date is absent from source with neighbour Present line nearby: date is nulled and flagged, and role is not rescued by neighbour line', () => {
+    const role0Bullet =
+      'Automated canary rollback controller reducing recovery time across production microservices.';
+    const role1Bullet =
+      'Built Prometheus federation pipeline aggregating active time series across clusters.';
+    const source = [
+      'Kendall Fictional',
+      'Senior Site Reliability Engineer',
+      'kendall.fictional@example.org',
+      'EXPERIENCE',
+      'Example Corp | Senior Site Reliability Engineer',
+      '2021-09 - Present',
+      '- Automated canary rollback controller reducing recovery time',
+      'across production microservices.',
+      'LANGUAGES',
+      'English (Native), Mandarin (Conversational)',
+      'Fictional Systems',
+      'Site Reliability Engineer',
+      `- ${role1Bullet}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Kendall Fictional',
+          headline: 'Senior Site Reliability Engineer',
+          email: 'kendall.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Senior Site Reliability Engineer',
+            start: '2021-09',
+            end: null,
+            current: true,
+            bullets: [role0Bullet],
+          },
+          {
+            id: 'exp-2',
+            company: 'Fictional Systems',
+            title: 'Site Reliability Engineer',
+            start: '2018-07',
+            end: null,
+            current: false,
+            bullets: [role1Bullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.experience[1].start).toBeNull();
+    expect(report.nulledPaths).toEqual(['experience[1].start']);
+    expect(resultDraft.low_confidence_paths).toEqual(['experience[1].start']);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('27. (6) first role has bullet "Presented quarterly results to the leadership team." and second role has its own date line 3 lines after company and title: second role start and end are kept and decoupledRoles is []', () => {
+    const role0Bullet = 'Presented quarterly results to the leadership team.';
+    const role1Bullet =
+      'Built internal service mesh routing tools for distributed microservices across staging clusters.';
+
+    const source = [
+      'Avery Fictional',
+      'avery.fictional@example.org',
+      'Experience',
+      'Example Corp',
+      'Staff Backend Engineer',
+      '2022-02 - Present',
+      `- ${role0Bullet}`,
+      'TypeScript, Go, PostgreSQL',
+      'Kubernetes, Terraform, gRPC',
+      'English (Native), Spanish (Fluent)',
+      'Distributed Systems Architecture',
+      'Fictional Labs',
+      'Backend Engineer',
+      'Example City',
+      '2019-06 - 2022-01',
+      `- ${role1Bullet}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Avery Fictional',
+          headline: 'Staff Backend Engineer',
+          email: 'avery.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Example Corp',
+            title: 'Staff Backend Engineer',
+            start: '2022-02',
+            end: null,
+            current: true,
+            bullets: [role0Bullet],
+          },
+          {
+            id: 'exp-2',
+            company: 'Fictional Labs',
+            title: 'Backend Engineer',
+            start: '2019-06',
+            end: '2022-01',
+            current: false,
+            bullets: [role1Bullet],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.experience[1].start).toBe('2019-06');
+    expect(resultDraft.experience[1].end).toBe('2022-01');
+    expect(report.nulledPaths).toEqual([]);
+    expect(report.decoupledRoles).toEqual([]);
+  });
+
+  it('28. (7) role with no date line at all but nearby bullet "Presented at a regional conference": start and end are nulled and flagged, and bullet line is never taken as a date line', () => {
+    const roleBullet1 =
+      'Built internal service mesh routing tools for distributed microservices across staging clusters.';
+    const roleBullet2 = 'Presented at a regional conference';
+
+    const source = [
+      'Avery Fictional',
+      'avery.fictional@example.org',
+      'Experience',
+      'Fictional Labs',
+      'Backend Engineer',
+      'Example City',
+      'Platform Engineering Division',
+      `- ${roleBullet1}`,
+      `- ${roleBullet2}`,
+    ].join('\n');
+
+    const draft = createFictionalDraft(
+      {
+        basics: {
+          fullName: 'Avery Fictional',
+          headline: 'Backend Engineer',
+          email: 'avery.fictional@example.org',
+          links: [],
+        },
+        experience: [
+          {
+            id: 'exp-1',
+            company: 'Fictional Labs',
+            title: 'Backend Engineer',
+            start: '2019-06',
+            end: '2022-01',
+            current: false,
+            bullets: [roleBullet1, roleBullet2],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.experience[0].start).toBeNull();
+    expect(resultDraft.experience[0].end).toBeNull();
+    expect(report.nulledPaths).toEqual([
+      'experience[0].start',
+      'experience[0].end',
+    ]);
+    expect(resultDraft.low_confidence_paths).toEqual([
+      'experience[0].start',
+      'experience[0].end',
+    ]);
     expect(report.decoupledRoles).toEqual([]);
   });
 });
