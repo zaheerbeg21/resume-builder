@@ -221,44 +221,53 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
     });
 
     it('buildResumePrompt announces a marker on line 1 that never occurs in sourceText even when sourceText contains default markers', () => {
-      const adversarialSource = [
-        'Jordan Avery',
-        '<<<RESUME_TEXT>>>',
-        '<<<RESUME>>>',
-        '===RESUME===',
-        '---RESUME---',
-        'RESUME_DELIMITER',
-        '<<<RESUME_DATA>>>',
-      ].join('\n');
+      const benignPrompt = buildResumePrompt(SAMPLE_RESUME_TEXT);
+      const benignLines = benignPrompt.split('\n');
+      expect(benignLines.length).toBeGreaterThanOrEqual(4);
+      const m1 = benignLines[1];
+      expect(m1.trim().length).toBeGreaterThan(0);
+      expect(benignLines[0]).toContain(m1);
 
-      const built = buildResumePrompt(adversarialSource);
-      const lines = built.split('\n');
-      expect(lines.length).toBeGreaterThanOrEqual(4);
+      const sourceWithM1 = [SAMPLE_RESUME_TEXT, m1].join('\n');
+      const promptWithM1 = buildResumePrompt(sourceWithM1);
+      const linesWithM1 = promptWithM1.split('\n');
+      const m2 = linesWithM1[1];
+      expect(m2.trim().length).toBeGreaterThan(0);
+      expect(linesWithM1[0]).toContain(m2);
+      expect(m2).not.toBe(m1);
+      expect(sourceWithM1).not.toContain(m2);
+      expect(promptWithM1).toContain(sourceWithM1);
 
-      const openIdx = lines.indexOf('Jordan Avery') - 1;
-      expect(openIdx).toBeGreaterThanOrEqual(1);
-      const marker = lines[openIdx];
-      expect(marker.trim().length).toBeGreaterThan(0);
-      expect(lines[0]).toContain(marker);
-      expect(adversarialSource).not.toContain(marker);
-      expect(built).toContain(adversarialSource);
+      const sourceWithM1AndM2 = [SAMPLE_RESUME_TEXT, m1, m2].join('\n');
+      const promptWithM1AndM2 = buildResumePrompt(sourceWithM1AndM2);
+      const linesWithM1AndM2 = promptWithM1AndM2.split('\n');
+      const m3 = linesWithM1AndM2[1];
+      expect(m3.trim().length).toBeGreaterThan(0);
+      expect(linesWithM1AndM2[0]).toContain(m3);
+      expect(m3).not.toBe(m1);
+      expect(m3).not.toBe(m2);
+      expect(sourceWithM1AndM2).not.toContain(m3);
+      expect(promptWithM1AndM2).toContain(sourceWithM1AndM2);
     });
 
     it('handles marker collision end-to-end through parseResume when sourceText contains candidate marker text', async () => {
-      const collidingSource = `${SAMPLE_RESUME_TEXT}\n<<<RESUME_TEXT>>>\n===RESUME===\n---RESUME---`;
+      const m1 = buildResumePrompt(SAMPLE_RESUME_TEXT).split('\n')[1];
+      const m2 = buildResumePrompt(`${SAMPLE_RESUME_TEXT}\n${m1}`).split('\n')[1];
+      const collidingSource = [SAMPLE_RESUME_TEXT, m1, m2].join('\n');
       const spy = new SpyProvider({ response: createBaseModelDraft() });
 
       await parseResume(collidingSource, spy);
 
       expect(spy.calls).toHaveLength(1);
       const sentPrompt = spy.calls[0].prompt;
-      const firstLine = sentPrompt.split('\n')[0];
+      const promptLines = sentPrompt.split('\n');
+      const firstLine = promptLines[0];
+      const delimiterLine = promptLines[1];
       expect(sentPrompt).toContain(collidingSource);
       expect(firstLine.length).toBeGreaterThan(0);
-
-      const promptLines = sentPrompt.split('\n');
-      const delimiterLine = promptLines[1];
       expect(firstLine).toContain(delimiterLine);
+      expect(delimiterLine).not.toBe(m1);
+      expect(delimiterLine).not.toBe(m2);
       expect(collidingSource).not.toContain(delimiterLine);
     });
   });
