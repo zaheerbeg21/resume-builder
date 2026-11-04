@@ -627,6 +627,107 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
         'Model returned no extractable content.',
       );
     });
+
+    // Section 4 step 3a: private-use bullet glyphs (here U+F0B7) are removed on both sides before the unslotted substring check.
+    const glyphStartSource = [
+      SAMPLE_RESUME_TEXT,
+      '',
+      'Additional Information',
+      '\uF0B7 Languages: Esperanto',
+      '\uF0B7 Availability: Two weeks',
+      '\uF0B7 Work Preference: Hybrid',
+    ].join('\n');
+
+    it('3a(1) keeps an unslotted item that joins three lines each starting with the U+F0B7 bullet glyph, with no dropped-content warning', async () => {
+      const joinedText =
+        'Languages: Esperanto\nAvailability: Two weeks\nWork Preference: Hybrid';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [{ label: 'Additional Information', text: joinedText }],
+        }),
+      });
+
+      const result = await parseResume(glyphStartSource, provider);
+
+      expect(result.draft.review_flags).toEqual([
+        { path: 'unslotted[0]', reason: 'UNSLOTTED_CONTENT', excerpt: joinedText },
+      ]);
+      expect(result.draft.warnings).toEqual([]);
+    });
+
+    it('3a(2) drops a glyph-joined unslotted item that contains one word not in the source, with the exact path-only warning', async () => {
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            {
+              label: 'Additional Information',
+              text: 'Languages: Esperanto\nAvailability: Two weeks\nWork Preference: Remote Hybrid',
+            },
+          ],
+        }),
+      });
+
+      const result = await parseResume(glyphStartSource, provider);
+
+      expect(result.draft.review_flags).toEqual([]);
+      expect(result.draft.warnings).toEqual([
+        'Dropped ungrounded unslotted content at unslotted[0].',
+      ]);
+    });
+
+    it('3a(3) treats U+F0B7 glyphs in the middle and at the end of a line the same as at the start', async () => {
+      const glyphMidEndSource = [
+        SAMPLE_RESUME_TEXT,
+        '',
+        'Additional Information',
+        'Languages: Esperanto \uF0B7 Availability: Two weeks \uF0B7',
+        'Work Preference: Hybrid \uF0B7',
+      ].join('\n');
+      const joinedText =
+        'Languages: Esperanto Availability: Two weeks Work Preference: Hybrid';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [{ label: 'Additional Information', text: joinedText }],
+        }),
+      });
+
+      const result = await parseResume(glyphMidEndSource, provider);
+
+      expect(result.draft.review_flags).toEqual([
+        { path: 'unslotted[0]', reason: 'UNSLOTTED_CONTENT', excerpt: joinedText },
+      ]);
+      expect(result.draft.warnings).toEqual([]);
+    });
+
+    it('3a(4) a U+F0B7 glyph inside a word is removed, not treated as a separator (conservative): the glyph-free word matches, a space in its place does not', async () => {
+      const glyphInWordSource = [
+        SAMPLE_RESUME_TEXT,
+        '',
+        'Volunteer',
+        'Hydro\uF0B7ponics Club organiser',
+      ].join('\n');
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Volunteer', text: 'Hydroponics Club organiser' },
+            { label: 'Volunteer', text: 'Hydro ponics Club organiser' },
+          ],
+        }),
+      });
+
+      const result = await parseResume(glyphInWordSource, provider);
+
+      expect(result.draft.review_flags).toEqual([
+        {
+          path: 'unslotted[0]',
+          reason: 'UNSLOTTED_CONTENT',
+          excerpt: 'Hydroponics Club organiser',
+        },
+      ]);
+      expect(result.draft.warnings).toEqual([
+        'Dropped ungrounded unslotted content at unslotted[1].',
+      ]);
+    });
   });
 
   describe('AC 8: Post-guard URL scheme normalization, unsupported scheme rejection, and ensureUrlScheme unit cases', () => {
