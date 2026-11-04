@@ -66,8 +66,11 @@ export interface ParseResumeResult {
 
 const ALLOWED_URL_SCHEME_REGEX = /^(?:https?:\/\/|mailto:)/i;
 
+// 3a: private-use glyphs and other-symbol bullets from PDF extraction are dropped; letters and digits are never in these categories.
+const BULLET_GLYPH_REGEX = /[\p{Co}\p{So}]/gu;
+
 function collapseWhitespaceLower(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().toLowerCase();
+  return text.replace(BULLET_GLYPH_REGEX, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function isModelDraftEmpty(modelDraft: ModelDraft): boolean {
