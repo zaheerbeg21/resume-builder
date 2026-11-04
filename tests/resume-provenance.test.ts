@@ -1901,4 +1901,101 @@ ${longBullet}
     ]);
     expect(report.decoupledRoles).toEqual([]);
   });
+
+  // Section 7a item 10: only a leading http:// or https:// is ignored when grounding a url.
+  const basicsWithLink = (url: string): ResumeImportDraft['basics'] => ({
+    fullName: null,
+    headline: '',
+    email: null,
+    phone: null,
+    location: '',
+    links: [{ label: 'Profile', url }],
+  });
+
+  it('29. (10) source has linkedin.com/in/alex-example, draft link adds https://: url kept, not nulled', () => {
+    const source = ['Alex Example', 'linkedin.com/in/alex-example'].join('\n');
+    const draft = createFictionalDraft(
+      { basics: basicsWithLink('https://linkedin.com/in/alex-example') },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.basics.links[0].url).toBe('https://linkedin.com/in/alex-example');
+    expect(report.nulledPaths).toEqual([]);
+  });
+
+  it('30. (10) source has https://example.org/a, draft link is scheme-less example.org/a: url kept', () => {
+    const source = ['Alex Example', 'https://example.org/a'].join('\n');
+    const draft = createFictionalDraft(
+      { basics: basicsWithLink('example.org/a') },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.basics.links[0].url).toBe('example.org/a');
+    expect(report.nulledPaths).toEqual([]);
+  });
+
+  it('31. (10) control: source has linkedin.com/in/alex-example, draft link points to another profile path: url nulled', () => {
+    const source = ['Alex Example', 'linkedin.com/in/alex-example'].join('\n');
+    const draft = createFictionalDraft(
+      { basics: basicsWithLink('https://linkedin.com/in/someone-else') },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.basics.links[0].url).toBeNull();
+    expect(report.nulledPaths).toEqual(['basics.links[0].url']);
+  });
+
+  it('32. (10) source has example.org/a, draft link is on a different host https://other.example.org/a: url nulled', () => {
+    const source = ['Alex Example', 'example.org/a'].join('\n');
+    const draft = createFictionalDraft(
+      { basics: basicsWithLink('https://other.example.org/a') },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.basics.links[0].url).toBeNull();
+    expect(report.nulledPaths).toEqual(['basics.links[0].url']);
+  });
+
+  it('33. (10) source has www.example.org/a, draft link drops www.: url nulled (conservative: www. is part of the host and must match)', () => {
+    const source = ['Alex Example', 'www.example.org/a'].join('\n');
+    const draft = createFictionalDraft(
+      { basics: basicsWithLink('https://example.org/a') },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.basics.links[0].url).toBeNull();
+    expect(report.nulledPaths).toEqual(['basics.links[0].url']);
+  });
+
+  it('34. (10) source has example.org/fictional-tool, draft project url adds https://: project url kept, not nulled', () => {
+    const source = ['Projects', 'Fictional Tool', 'example.org/fictional-tool'].join('\n');
+    const draft = createFictionalDraft(
+      {
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Fictional Tool',
+            url: 'https://example.org/fictional-tool',
+            bullets: [],
+          },
+        ],
+      },
+      { minimal: true }
+    );
+
+    const { draft: resultDraft, report } = guardProvenance(draft, source);
+
+    expect(resultDraft.projects[0].url).toBe('https://example.org/fictional-tool');
+    expect(report.nulledPaths).toEqual([]);
+  });
 });
