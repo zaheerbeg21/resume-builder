@@ -38,6 +38,19 @@ function isGroundedSubstring(needle: string, haystack: string): boolean {
   return pattern.test(normHaystack);
 }
 
+const URL_SCHEME_PREFIX_REGEX = /^https?:\/\//i;
+
+// Item 10: only a leading http(s):// is ignored; a host character ('.', '-', letter, digit) may not precede the match, so 'www.' must match.
+function isGroundedUrl(url: string, sourceText: string): boolean {
+  const normNeedle = normalizeWhitespace(url.replace(URL_SCHEME_PREFIX_REGEX, ''));
+  if (!normNeedle) return true;
+  const pattern = new RegExp(
+    `(?:^|https?:\\/\\/|[^\\p{L}\\p{N}.\\-/])${escapeRegex(normNeedle)}(?=$|[^\\p{L}\\p{N}+#])`,
+    'iu',
+  );
+  return pattern.test(normalizeWhitespace(sourceText));
+}
+
 const MONTH_NAMES: Record<string, string> = {
   january: '01', jan: '01',
   february: '02', feb: '02',
@@ -206,7 +219,7 @@ export function guardProvenance(
   }
 
   const newLinks = draft.basics.links.map((link, i) => {
-    if (link.url !== null && !isGroundedSubstring(link.url, sourceText)) {
+    if (link.url !== null && !isGroundedUrl(link.url, sourceText)) {
       nulledPaths.push(`basics.links[${i}].url`);
       return { ...link, url: null };
     }
@@ -493,7 +506,7 @@ export function guardProvenance(
 
     let url = proj.url;
     if (url !== null && url !== undefined) {
-      if (!isGroundedSubstring(url, sourceText)) {
+      if (!isGroundedUrl(url, sourceText)) {
         url = null;
         nulledPaths.push(`projects[${i}].url`);
       }
