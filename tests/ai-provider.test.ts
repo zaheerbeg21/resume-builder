@@ -58,6 +58,7 @@ describe('T-015 LLM Provider Seam', () => {
   describe('resolveGeminiModel', () => {
     it('returns DEFAULT_GEMINI_MODEL when GEMINI_MODEL_FAST is undefined', () => {
       expect(resolveGeminiModel({})).toBe(DEFAULT_GEMINI_MODEL);
+      expect(resolveGeminiModel({})).toBe('gemini-3.5-flash-lite');
     });
 
     it('returns the custom model when GEMINI_MODEL_FAST is set', () => {
