@@ -8,10 +8,14 @@
  * - Dates (start, end) are compared as written (exact match after trimming).
  * - Link labels (basics.links[i].label) are ignored; only basics.links[i].url is compared.
  * - id, warnings, and low_confidence_paths are ignored in field accuracy scoring.
- * - review_flags with reason UNSLOTTED_CONTENT are compared by path and excerpt (after trim and
- *   collapsing runs of whitespace to one space) at
- *   review_flags[i]; missing flags count as wrong and null, and surplus UNSLOTTED_CONTENT flags
- *   count as surplus. EXCEEDS_LENGTH_LIMIT flags are ignored unless listed in expected.
+ * - review_flags with reason UNSLOTTED_CONTENT are compared by content coverage, not by item:
+ *   the whitespace-split words of all expected excerpts and of all actual excerpts are collected
+ *   (case-folded, private-use and other-symbol glyphs removed) and compared as multisets.
+ *   The whole unslotted set counts as ONE field per fixture: correct when no expected word is
+ *   missing and no actual word is surplus; wrong otherwise; also null when every expected word
+ *   is missing. The missing-word and surplus-word counts are printed on a separate line per fixture
+ *   ('unslotted missing=N surplus=M') and never added to the totals. Item grouping and order do not matter.
+ *   EXCEEDS_LENGTH_LIMIT flags are matched by path and ignored unless listed in expected.
  * - A null (or equivalent empty string) counts as wrong only when the expected value is non-null.
  * - Expected '' (or null) vs actual non-empty is counted as wrong (e.g. negative-control fixtures).
  * - Extra array items in actual beyond expected length count as wrong at their index path and are
@@ -109,6 +113,8 @@ interface FixtureEvalMetrics {
   correct: number;
   wrong: number;
   nullCount: number;
+  unslottedMissing: number;
+  unslottedSurplus: number;
   latencyMs: number;
   model?: string;
   wrongPaths: string[];
@@ -219,8 +225,8 @@ function formatErrorOneLine(err: unknown): {
     errObj && typeof errObj.message === 'string'
       ? errObj.message
       : typeof err === 'string'
-      ? err
-      : 'unhandled error';
+        ? err
+        : 'unhandled error';
   const firstLine = (rawMessage.split(/\r?\n/)[0] ?? '').trim();
 
   return { name, firstLine, extra: '' };
@@ -282,6 +288,20 @@ function normalizeReviewFlagExcerpt(
   }
   const collapsed = value.trim().replace(/\s+/g, ' ');
   return collapsed.length === 0 ? null : collapsed;
+}
+
+// Same categories the parser drops before its unslotted grounding check (T-024 step 3a).
+const BULLET_GLYPH_REGEX = /[\p{Co}\p{So}]/gu;
+
+function unslottedWords(
+  flags: { reason: string; excerpt?: string | null }[],
+): string[] {
+  return flags
+    .filter((f) => f.reason === 'UNSLOTTED_CONTENT')
+    .flatMap((f) =>
+      (f.excerpt ?? '').replace(BULLET_GLYPH_REGEX, '').toLowerCase().split(/\s+/),
+    )
+    .filter((w) => w.length > 0);
 }
 
 class FieldAccumulator {
@@ -523,39 +543,7 @@ function evaluateDraft(
     const expPathTrimmed = expFlag.path.trim();
     const expExcerptNormalized = normalizeReviewFlagExcerpt(expFlag.excerpt);
 
-    if (expFlag.reason === 'UNSLOTTED_CONTENT') {
-      let matchIdx = actFlags.findIndex(
-        (af, idx) =>
-          !consumedActualFlags.has(idx) &&
-          af.reason === 'UNSLOTTED_CONTENT' &&
-          af.path.trim() === expPathTrimmed &&
-          normalizeReviewFlagExcerpt(af.excerpt) === expExcerptNormalized,
-      );
-      if (matchIdx === -1) {
-        matchIdx = actFlags.findIndex(
-          (af, idx) =>
-            !consumedActualFlags.has(idx) &&
-            af.reason === 'UNSLOTTED_CONTENT' &&
-            af.path.trim() === expPathTrimmed,
-        );
-      }
-
-      if (matchIdx === -1) {
-        acc.total += 1;
-        acc.wrong += 1;
-        acc.nullCount += 1;
-        acc.wrongPaths.push(flagPath);
-        acc.nullPaths.push(flagPath);
-        acc.pathOutcomes.set(flagPath, 'wrong_null');
-      } else {
-        consumedActualFlags.add(matchIdx);
-        acc.compareString(
-          flagPath,
-          expExcerptNormalized,
-          normalizeReviewFlagExcerpt(actFlags[matchIdx].excerpt),
-        );
-      }
-    } else if (expFlag.reason === 'EXCEEDS_LENGTH_LIMIT') {
+    if (expFlag.reason === 'EXCEEDS_LENGTH_LIMIT') {
       const matchIdx = actFlags.findIndex(
         (af, idx) =>
           !consumedActualFlags.has(idx) &&
@@ -591,13 +579,45 @@ function evaluateDraft(
     if (consumedActualFlags.has(idx)) {
       continue;
     }
-    const af = actFlags[idx];
-    if (
-      af.reason === 'UNSLOTTED_CONTENT' ||
-      (af.reason === 'EXCEEDS_LENGTH_LIMIT' && expectsLengthLimitFlags)
-    ) {
+    if (actFlags[idx].reason === 'EXCEEDS_LENGTH_LIMIT' && expectsLengthLimitFlags) {
       acc.recordSurplus(`review_flags[${surplusFlagIdx}]`);
       surplusFlagIdx += 1;
+    }
+  }
+
+  // UNSLOTTED_CONTENT: content coverage as ONE field per fixture.
+  const actualWordCounts = new Map<string, number>();
+  for (const w of unslottedWords(actFlags)) {
+    actualWordCounts.set(w, (actualWordCounts.get(w) ?? 0) + 1);
+  }
+  let missingWords = 0;
+  const expectedWords = unslottedWords(expFlags);
+  for (const w of expectedWords) {
+    const count = actualWordCounts.get(w) ?? 0;
+    if (count > 0) {
+      actualWordCounts.set(w, count - 1);
+    } else {
+      missingWords += 1;
+    }
+  }
+  let surplusWords = 0;
+  for (const count of actualWordCounts.values()) {
+    surplusWords += count;
+  }
+
+  acc.total += 1;
+  if (missingWords === 0 && surplusWords === 0) {
+    acc.correct += 1;
+    acc.pathOutcomes.set('review_flags', 'correct');
+  } else {
+    acc.wrong += 1;
+    acc.wrongPaths.push('review_flags');
+    if (expectedWords.length > 0 && missingWords === expectedWords.length) {
+      acc.nullCount += 1;
+      acc.nullPaths.push('review_flags');
+      acc.pathOutcomes.set('review_flags', 'wrong_null');
+    } else {
+      acc.pathOutcomes.set('review_flags', 'wrong');
     }
   }
 
@@ -608,6 +628,8 @@ function evaluateDraft(
     correct: acc.correct,
     wrong: acc.wrong,
     nullCount: acc.nullCount,
+    unslottedMissing: missingWords,
+    unslottedSurplus: surplusWords,
     latencyMs,
     model,
     wrongPaths: acc.wrongPaths,
@@ -802,6 +824,9 @@ async function runSinglePass(
       console.log(
         `[fixture=${stem}] total=${metrics.total} correct=${metrics.correct} wrong=${metrics.wrong} null=${metrics.nullCount} latencyMs=${metrics.latencyMs} warningsCount=${metrics.warningsCount} wrongPaths=${JSON.stringify(metrics.wrongPaths)} nullPaths=${JSON.stringify(metrics.nullPaths)} surplusPaths=${JSON.stringify(metrics.surplusPaths)} provenance.nulledPaths=${JSON.stringify(metrics.provenanceNulledPaths)} provenance.decoupledRoles=${JSON.stringify(metrics.provenanceDecoupledRoles)}`,
       );
+      console.log(
+        `unslotted missing=${metrics.unslottedMissing} surplus=${metrics.unslottedSurplus}`,
+      );
     } catch (err: unknown) {
       const { name, firstLine, extra } = formatErrorOneLine(err);
       const failureCategory = classifyFailure(err);
@@ -816,6 +841,8 @@ async function runSinglePass(
         correct: 0,
         wrong: 0,
         nullCount: 0,
+        unslottedMissing: 0,
+        unslottedSurplus: 0,
         latencyMs: 0,
         wrongPaths: [],
         nullPaths: [],
@@ -927,67 +954,107 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
     'utf8',
   );
   const expected = JSON.parse(expectedRaw) as ExpectedDraft;
-  const actualWithMissingFlag = expectedToDraft(expected);
-  actualWithMissingFlag.review_flags.pop();
-  const missingFlagMetrics = evaluateDraft(
-    'self-check-missing-review-flag',
-    expected,
-    actualWithMissingFlag,
-    [],
-    [],
-    0,
-    configuredModel,
-  );
-  console.log(
-    `[self-check-missing-flag] total=${missingFlagMetrics.total} correct=${missingFlagMetrics.correct} wrong=${missingFlagMetrics.wrong} null=${missingFlagMetrics.nullCount} wrongPaths=${JSON.stringify(missingFlagMetrics.wrongPaths)} nullPaths=${JSON.stringify(missingFlagMetrics.nullPaths)}`,
-  );
-  if (missingFlagMetrics.wrong !== 1 || missingFlagMetrics.nullCount !== 1) {
-    throw new Error(
-      `Expected missing flag probe wrong=1 null=1 but got wrong=${missingFlagMetrics.wrong} null=${missingFlagMetrics.nullCount}`,
+  const probe = (label: string, mutate: (d: ResumeImportDraft) => void) => {
+    const draft = expectedToDraft(expected);
+    mutate(draft);
+    const m = evaluateDraft(label, expected, draft, [], [], 0, configuredModel);
+    console.log(
+      `[${label}] total=${m.total} correct=${m.correct} wrong=${m.wrong} null=${m.nullCount} surplus=${m.surplusPaths.length} wrongPaths=${JSON.stringify(m.wrongPaths)} surplusPaths=${JSON.stringify(m.surplusPaths)}`,
     );
-  }
-
-  const actualWithNewlineExcerpt = expectedToDraft(expected);
-  actualWithNewlineExcerpt.review_flags[0].excerpt = (
-    actualWithNewlineExcerpt.review_flags[0].excerpt ?? ''
-  ).replace(' ', '\n  ');
-  const newlineMetrics = evaluateDraft(
-    'self-check-newline-excerpt',
-    expected,
-    actualWithNewlineExcerpt,
-    [],
-    [],
-    0,
-    configuredModel,
-  );
-  if (newlineMetrics.wrong !== 0) {
-    throw new Error(
-      `Expected newline excerpt probe wrong=0 but got wrong=${newlineMetrics.wrong}`,
+    console.log(
+      `unslotted missing=${m.unslottedMissing} surplus=${m.unslottedSurplus}`,
     );
+    return m;
+  };
+  const unslottedExcerpts = (expected.review_flags ?? [])
+    .filter((f) => f.reason === 'UNSLOTTED_CONTENT')
+    .map((f) => f.excerpt ?? '');
+  if (unslottedExcerpts.length < 2) {
+    throw new Error('Self-check fixture needs at least two UNSLOTTED_CONTENT flags');
   }
+  const withUnslotted = (d: ResumeImportDraft, excerpts: string[]) => {
+    d.review_flags = [
+      ...d.review_flags.filter((f) => f.reason !== 'UNSLOTTED_CONTENT'),
+      ...excerpts.map((excerpt, i) => ({
+        path: `unslotted[${i}]`,
+        reason: 'UNSLOTTED_CONTENT' as const,
+        excerpt,
+      })),
+    ];
+  };
+  const groupedExcerpt = unslottedExcerpts.join('\n');
+  const expectPerfect = (m: FixtureEvalMetrics, label: string) => {
+    if (
+      m.wrong !== 0 ||
+      m.nullCount !== 0 ||
+      m.surplusPaths.length !== 0 ||
+      m.correct !== m.total ||
+      m.unslottedMissing !== 0 ||
+      m.unslottedSurplus !== 0
+    ) {
+      throw new Error(
+        `Expected ${label} probe to score 100% but got correct=${m.correct}/${m.total} wrong=${m.wrong} missing=${m.unslottedMissing} surplus=${m.unslottedSurplus}`,
+      );
+    }
+  };
 
-  const actualWithChangedWordExcerpt = expectedToDraft(expected);
-  actualWithChangedWordExcerpt.review_flags[0].excerpt = `${
-    actualWithChangedWordExcerpt.review_flags[0].excerpt ?? ''
-  } alteredword`;
-  const changedWordMetrics = evaluateDraft(
-    'self-check-changed-word-excerpt',
-    expected,
-    actualWithChangedWordExcerpt,
-    [],
-    [],
-    0,
-    configuredModel,
+  // Same words in one grouped item, and split one word per item in reverse order: both 100%.
+  const grouped = probe('self-check-unslotted-grouped', (d) =>
+    withUnslotted(d, [groupedExcerpt]),
   );
-  console.log(
-    `[self-check-excerpt-whitespace] newlineWrong=${newlineMetrics.wrong} changedWordWrong=${changedWordMetrics.wrong} changedWordWrongPaths=${JSON.stringify(changedWordMetrics.wrongPaths)}`,
+  expectPerfect(grouped, 'grouped');
+
+  const split = probe('self-check-unslotted-split', (d) =>
+    withUnslotted(d, groupedExcerpt.split(/\s+/).filter(Boolean).reverse()),
+  );
+  expectPerfect(split, 'split');
+
+  const newline = probe('self-check-unslotted-newline', (d) =>
+    withUnslotted(d, unslottedExcerpts.map((e) => e.replace(' ', '\n  '))),
+  );
+  expectPerfect(newline, 'newline');
+
+  const removedWord = probe('self-check-unslotted-removed-word', (d) =>
+    withUnslotted(d, [groupedExcerpt.replace(/\s*\S+$/, '')]),
   );
   if (
-    changedWordMetrics.wrong !== 1 ||
-    changedWordMetrics.wrongPaths[0] !== 'review_flags[0]'
+    removedWord.wrong !== 1 ||
+    removedWord.unslottedMissing !== 1 ||
+    removedWord.unslottedSurplus !== 0 ||
+    removedWord.total !== grouped.total ||
+    removedWord.wrongPaths[0] !== 'review_flags'
   ) {
     throw new Error(
-      `Expected changed-word excerpt probe wrong=1 at review_flags[0] but got wrong=${changedWordMetrics.wrong} paths=${JSON.stringify(changedWordMetrics.wrongPaths)}`,
+      `Expected removed-word probe wrong=1 with missing=1 (total=${grouped.total}) but got wrong=${removedWord.wrong} missing=${removedWord.unslottedMissing} surplus=${removedWord.unslottedSurplus} total=${removedWord.total}`,
+    );
+  }
+
+  const addedWord = probe('self-check-unslotted-added-word', (d) =>
+    withUnslotted(d, [`${groupedExcerpt} extraword`]),
+  );
+  if (
+    addedWord.wrong !== 1 ||
+    addedWord.unslottedSurplus !== 1 ||
+    addedWord.unslottedMissing !== 0 ||
+    addedWord.total !== grouped.total ||
+    addedWord.wrongPaths[0] !== 'review_flags'
+  ) {
+    throw new Error(
+      `Expected added-word probe wrong=1 with surplus=1 (total=${grouped.total}) but got wrong=${addedWord.wrong} surplus=${addedWord.unslottedSurplus} missing=${addedWord.unslottedMissing} total=${addedWord.total}`,
+    );
+  }
+
+  const allMissing = probe('self-check-unslotted-all-missing', (d) =>
+    withUnslotted(d, []),
+  );
+  if (
+    allMissing.wrong !== 1 ||
+    allMissing.nullCount !== 1 ||
+    allMissing.unslottedMissing !==
+      unslottedWords(expected.review_flags ?? []).length
+  ) {
+    throw new Error(
+      `Expected all-missing probe wrong=1 null=1 but got wrong=${allMissing.wrong} null=${allMissing.nullCount}`,
     );
   }
 
@@ -1010,6 +1077,8 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
     correct: 0,
     wrong: 0,
     nullCount: 0,
+    unslottedMissing: 0,
+    unslottedSurplus: 0,
     latencyMs: 0,
     wrongPaths: [],
     nullPaths: [],
@@ -1027,6 +1096,8 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
     correct: 0,
     wrong: 0,
     nullCount: 0,
+    unslottedMissing: 0,
+    unslottedSurplus: 0,
     latencyMs: 0,
     wrongPaths: [],
     nullPaths: [],
