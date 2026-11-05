@@ -1278,33 +1278,35 @@ async function runSelfCheckFailureProbe(
   const makeMockProvider = (sequence: Array<unknown | 'ok'>): LlmProvider => {
     let callIdx = 0;
     return {
-      generateStructured: async () => {
+      name: 'fake' as const,
+      // Generic signature satisfies LlmProvider; canned data cast at return site.
+      generateStructured: async <T,>(params: { schema: { parse: (v: unknown) => T } }) => {
         const item = sequence[callIdx++];
         if (item !== 'ok') {
           throw item;
         }
-        return {
-          data: {
-            basics: {
-              fullName: 'Candidate',
-              headline: null,
-              email: null,
-              phone: null,
-              location: null,
-              links: [],
-            },
-            summary: '',
-            experience: [],
-            projects: [],
-            education: [],
-            skills: [],
-            unslotted: [],
+        const canned = {
+          basics: {
+            fullName: 'Candidate',
+            headline: null,
+            email: null,
+            phone: null,
+            location: null,
+            links: [],
           },
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        } as unknown as Awaited<ReturnType<LlmProvider['generateStructured']>>;
-      },
-      generateJson: async () => {
-        throw new Error('generateJson not used');
+          summary: '',
+          experience: [],
+          projects: [],
+          education: [],
+          skills: [],
+          unslotted: [],
+        };
+        return {
+          data: params.schema.parse(canned) as T,
+          provider: 'fake' as const,
+          model: 'mock',
+          latencyMs: 0,
+        };
       },
     };
   };
