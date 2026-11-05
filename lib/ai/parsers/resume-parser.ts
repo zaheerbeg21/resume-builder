@@ -193,6 +193,17 @@ export async function parseResume(
   const flaggedDraft = flagOverLimitContent(guardedDraft);
 
   const postWarnings = [...flaggedDraft.warnings];
+  const postLowConfidencePaths = [...flaggedDraft.low_confidence_paths];
+
+  flaggedDraft.basics.links.forEach((link, idx) => {
+    if (link.url === null) {
+      postWarnings.push(`Link url missing at basics.links[${idx}].`);
+      if (!postLowConfidencePaths.includes(`basics.links[${idx}].url`)) {
+        postLowConfidencePaths.push(`basics.links[${idx}].url`);
+      }
+    }
+  });
+
   const normalizedLinks = flaggedDraft.basics.links.map((link, idx) => ({
     label: link.label,
     url: normalizeAndValidateUrl(
@@ -237,6 +248,7 @@ export async function parseResume(
     },
     projects: normalizedProjects,
     warnings: postWarnings,
+    low_confidence_paths: postLowConfidencePaths,
   };
 
   return {
