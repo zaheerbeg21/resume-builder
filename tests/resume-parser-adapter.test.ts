@@ -442,6 +442,117 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
     });
   });
 
+  describe('AC 3b: Missing link url warnings and low_confidence_paths', () => {
+    it('adds warning and low_confidence_paths when model returns basics.links with one entry whose url is null', async () => {
+      const draftWithNullLink = createBaseModelDraft({
+        basics: {
+          ...createBaseModelDraft().basics,
+          links: [{ label: 'Personal Site', url: null }],
+        },
+      });
+
+      const provider = new FakeProvider({ response: draftWithNullLink });
+      const result = await parseResume(SAMPLE_RESUME_TEXT, provider);
+
+      expect(result.draft.warnings).toContain(
+        'Link url missing at basics.links[0].',
+      );
+      expect(result.draft.low_confidence_paths).toContain(
+        'basics.links[0].url',
+      );
+    });
+
+    it('uses index 1 path when two link entries and only the second url is null', async () => {
+      const draftWithSecondNull = createBaseModelDraft({
+        basics: {
+          ...createBaseModelDraft().basics,
+          links: [
+            { label: 'Portfolio', url: 'https://example.org/portfolio' },
+            { label: 'LinkedIn', url: null },
+          ],
+        },
+      });
+
+      const provider = new FakeProvider({ response: draftWithSecondNull });
+      const result = await parseResume(SAMPLE_RESUME_TEXT, provider);
+
+      expect(result.draft.warnings).toContain(
+        'Link url missing at basics.links[1].',
+      );
+      expect(result.draft.warnings).not.toContain(
+        'Link url missing at basics.links[0].',
+      );
+      expect(result.draft.low_confidence_paths).toContain(
+        'basics.links[1].url',
+      );
+      expect(result.draft.low_confidence_paths).not.toContain(
+        'basics.links[0].url',
+      );
+    });
+
+    it('produces no link url warning for a project with a null url', async () => {
+      const draftWithNullProjectUrl = createBaseModelDraft({
+        projects: [
+          {
+            name: 'KvStream',
+            url: null,
+            bullets: ['Implemented Raft log compaction engine in TypeScript.'],
+          },
+        ],
+      });
+
+      const provider = new FakeProvider({ response: draftWithNullProjectUrl });
+      const result = await parseResume(SAMPLE_RESUME_TEXT, provider);
+
+      const linkUrlWarnings = result.draft.warnings.filter((w) =>
+        w.startsWith('Link url missing at'),
+      );
+      expect(linkUrlWarnings).toEqual([]);
+      expect(result.draft.low_confidence_paths).not.toContain('projects[0].url');
+    });
+
+    it('produces no warning when every link has a url', async () => {
+      const draftWithAllUrls = createBaseModelDraft({
+        basics: {
+          ...createBaseModelDraft().basics,
+          links: [
+            { label: 'Site', url: 'example.org/me' },
+            { label: 'Portfolio', url: 'https://example.org/portfolio' },
+          ],
+        },
+      });
+
+      const provider = new FakeProvider({ response: draftWithAllUrls });
+      const result = await parseResume(SAMPLE_RESUME_TEXT, provider);
+
+      const linkUrlWarnings = result.draft.warnings.filter((w) =>
+        w.startsWith('Link url missing at'),
+      );
+      expect(linkUrlWarnings).toEqual([]);
+      expect(result.draft.low_confidence_paths).not.toContain('basics.links[0].url');
+      expect(result.draft.low_confidence_paths).not.toContain('basics.links[1].url');
+    });
+
+    it('never contains the link label in the warning text', async () => {
+      const customLabel = 'FictionalSensitiveLinkLabel999';
+      const draftWithCustomLabel = createBaseModelDraft({
+        basics: {
+          ...createBaseModelDraft().basics,
+          links: [{ label: customLabel, url: null }],
+        },
+      });
+
+      const provider = new FakeProvider({ response: draftWithCustomLabel });
+      const result = await parseResume(SAMPLE_RESUME_TEXT, provider);
+
+      expect(result.draft.warnings).toContain(
+        'Link url missing at basics.links[0].',
+      );
+      const joinedWarnings = result.draft.warnings.join(' ');
+      expect(joinedWarnings).not.toContain(customLabel);
+    });
+  });
+
   describe('AC 4 & AC 5: Error propagation and empty input guard', () => {
     it.each([
       { kind: 'api' as ProviderErrorKind, status: 503 },
