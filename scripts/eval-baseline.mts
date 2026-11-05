@@ -27,6 +27,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveGeminiModel } from '../lib/ai/config';
 import { parseResume } from '../lib/ai/parsers/resume-parser';
+import type { LlmProvider } from '../lib/ai/provider';
 import { GeminiProvider } from '../lib/ai/providers/gemini';
 import { ResumeImportDraftSchema, type ResumeImportDraft } from '../lib/ai/schemas';
 
@@ -38,6 +39,7 @@ const FIXTURES_DIR = path.join(
   'resumes',
 );
 const DEFAULT_PAUSE_BETWEEN_CALLS_MS = 4500;
+const DEFAULT_ABORT_AFTER = 3;
 
 interface ExpectedBasics {
   fullName?: string | null;
@@ -266,6 +268,53 @@ function parsePauseMsArg(argv: string[]): number {
     }
   }
   return DEFAULT_PAUSE_BETWEEN_CALLS_MS;
+}
+
+function parseOnlyArg(argv: string[]): string | null {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--only' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
+      return argv[i + 1].trim();
+    }
+    if (arg.startsWith('--only=')) {
+      const val = arg.slice('--only='.length).trim();
+      return val.length > 0 ? val : null;
+    }
+  }
+  return null;
+}
+
+function filterFixturesByOnly(files: string[], only: string | null): string[] {
+  if (!only) {
+    return files;
+  }
+  const clean = only.trim();
+  const targetStem = clean.endsWith('.txt')
+    ? clean.slice(0, -'.txt'.length)
+    : clean;
+  return files.filter(
+    (f) =>
+      f.slice(0, -'.txt'.length) === targetStem ||
+      f.slice(0, -'.txt'.length).toLowerCase() === targetStem.toLowerCase(),
+  );
+}
+
+function parseAbortAfterArg(argv: string[]): number {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--abort-after' && argv[i + 1]) {
+      const parsed = Number.parseInt(argv[i + 1], 10);
+      if (Number.isInteger(parsed) && parsed >= 1) {
+        return parsed;
+      }
+    } else if (arg.startsWith('--abort-after=')) {
+      const parsed = Number.parseInt(arg.slice('--abort-after='.length), 10);
+      if (Number.isInteger(parsed) && parsed >= 1) {
+        return parsed;
+      }
+    }
+  }
+  return DEFAULT_ABORT_AFTER;
 }
 
 function hasSelfCheckArg(argv: string[]): boolean {
@@ -763,12 +812,15 @@ async function runSinglePass(
   runIndex: number,
   totalRuns: number,
   txtFiles: string[],
-  provider: GeminiProvider | null,
+  provider: LlmProvider | null,
   configuredModel: string,
   pauseMs: number,
   selfCheck: boolean,
-): Promise<FixtureEvalMetrics[]> {
+  abortAfter: number = DEFAULT_ABORT_AFTER,
+): Promise<{ results: FixtureEvalMetrics[]; aborted: boolean }> {
   const results: FixtureEvalMetrics[] = [];
+  let consecutiveDegraded = 0;
+  let aborted = false;
 
   if (totalRuns > 1) {
     console.log(`\n=== Run ${runIndex + 1} of ${totalRuns} ===`);
@@ -805,7 +857,7 @@ async function runSinglePass(
         );
       } else {
         if (!provider) {
-          throw new Error('GeminiProvider instance is required');
+          throw new Error('LlmProvider instance is required');
         }
         const parsed = await parseResume(sourceText, provider);
         metrics = evaluateDraft(
@@ -820,6 +872,7 @@ async function runSinglePass(
       }
 
       results.push(metrics);
+      consecutiveDegraded = 0;
 
       console.log(
         `[fixture=${stem}] total=${metrics.total} correct=${metrics.correct} wrong=${metrics.wrong} null=${metrics.nullCount} latencyMs=${metrics.latencyMs} warningsCount=${metrics.warningsCount} wrongPaths=${JSON.stringify(metrics.wrongPaths)} nullPaths=${JSON.stringify(metrics.nullPaths)} surplusPaths=${JSON.stringify(metrics.surplusPaths)} provenance.nulledPaths=${JSON.stringify(metrics.provenanceNulledPaths)} provenance.decoupledRoles=${JSON.stringify(metrics.provenanceDecoupledRoles)}`,
@@ -852,7 +905,23 @@ async function runSinglePass(
         warningsCount: 0,
         pathOutcomes: new Map(),
       });
+
+      if (failureCategory === 'timeout' || failureCategory === 'api_503') {
+        consecutiveDegraded += 1;
+        if (consecutiveDegraded >= abortAfter) {
+          aborted = true;
+          break;
+        }
+      } else {
+        consecutiveDegraded = 0;
+      }
     }
+  }
+
+  if (aborted) {
+    console.log('aborted: API degraded');
+    reportFailureCounts([results]);
+    return { results, aborted: true };
   }
 
   const totalFields = results.reduce((sum, r) => sum + r.total, 0);
@@ -875,7 +944,7 @@ async function runSinglePass(
     `[final${totalRuns > 1 ? ` run=${runIndex + 1}` : ''}] fixturesRun=${results.length} failed=${failedFixturesList.length} noResultFixtures=${JSON.stringify(failedFixturesList)}`,
   );
 
-  return results;
+  return { results, aborted: false };
 }
 
 function reportMultiRunDiffs(allRuns: FixtureEvalMetrics[][]): void {
@@ -948,7 +1017,10 @@ function reportFailureCounts(
   return counts;
 }
 
-async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> {
+async function runSelfCheckFailureProbe(
+  configuredModel: string,
+  allTxtFiles: string[],
+): Promise<void> {
   const expectedRaw = await fs.readFile(
     path.join(FIXTURES_DIR, '06-extra-sections.expected.json'),
     'utf8',
@@ -1051,7 +1123,7 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
     allMissing.wrong !== 1 ||
     allMissing.nullCount !== 1 ||
     allMissing.unslottedMissing !==
-      unslottedWords(expected.review_flags ?? []).length
+    unslottedWords(expected.review_flags ?? []).length
   ) {
     throw new Error(
       `Expected all-missing probe wrong=1 null=1 but got wrong=${allMissing.wrong} null=${allMissing.nullCount}`,
@@ -1115,6 +1187,270 @@ async function runSelfCheckFailureProbe(configuredModel: string): Promise<void> 
       `Expected synthetic timeout=1 and api_429=1 but got timeout=${counts.timeout} api_429=${counts.api_429}`,
     );
   }
+
+  // --- Proof 1: --only <stem> ---
+  if (parseOnlyArg(['--only', '09-real-extraction']) !== '09-real-extraction') {
+    throw new Error('Expected parseOnlyArg with separate arg to parse stem');
+  }
+  if (parseOnlyArg(['--only=09-real-extraction']) !== '09-real-extraction') {
+    throw new Error('Expected parseOnlyArg with = to parse stem');
+  }
+  if (parseOnlyArg(['--only']) !== null) {
+    throw new Error('Expected parseOnlyArg with no value to return null');
+  }
+  if (parseOnlyArg(['--only', '--other']) !== null) {
+    throw new Error('Expected parseOnlyArg with flag value to return null');
+  }
+  if (parseOnlyArg([]) !== null) {
+    throw new Error('Expected parseOnlyArg with empty argv to return null');
+  }
+
+  const sampleList = [
+    '01-summary-in-banner.txt',
+    '06-extra-sections.txt',
+    '09-real-extraction.txt',
+  ];
+  const onlyExact = filterFixturesByOnly(sampleList, '06-extra-sections');
+  if (onlyExact.length !== 1 || onlyExact[0] !== '06-extra-sections.txt') {
+    throw new Error(
+      `Expected filterFixturesByOnly to return 06-extra-sections.txt, got ${JSON.stringify(onlyExact)}`,
+    );
+  }
+  const onlyWithExt = filterFixturesByOnly(sampleList, '09-real-extraction.txt');
+  if (onlyWithExt.length !== 1 || onlyWithExt[0] !== '09-real-extraction.txt') {
+    throw new Error(
+      `Expected filterFixturesByOnly with .txt extension to return 09-real-extraction.txt, got ${JSON.stringify(onlyWithExt)}`,
+    );
+  }
+  const onlyMissing = filterFixturesByOnly(sampleList, 'nonexistent');
+  if (onlyMissing.length !== 0) {
+    throw new Error(
+      `Expected filterFixturesByOnly with nonexistent stem to return empty, got ${JSON.stringify(onlyMissing)}`,
+    );
+  }
+
+  const singleFixturePass = await runSinglePass(
+    0,
+    1,
+    ['06-extra-sections.txt'],
+    null,
+    configuredModel,
+    0,
+    true,
+    DEFAULT_ABORT_AFTER,
+  );
+  if (
+    singleFixturePass.results.length !== 1 ||
+    singleFixturePass.results[0].fixture !== '06-extra-sections' ||
+    singleFixturePass.aborted
+  ) {
+    throw new Error(
+      `Expected single fixture run to evaluate exactly 1 fixture without abort, got count=${singleFixturePass.results.length} aborted=${singleFixturePass.aborted}`,
+    );
+  }
+
+  // --- Proof 2: --abort-after N (default 3) ---
+  if (parseAbortAfterArg([]) !== 3) {
+    throw new Error(
+      `Expected default abort-after to be 3, got ${parseAbortAfterArg([])}`,
+    );
+  }
+  if (parseAbortAfterArg(['--abort-after', '5']) !== 5) {
+    throw new Error('Expected parseAbortAfterArg with separate arg to return 5');
+  }
+  if (parseAbortAfterArg(['--abort-after=2']) !== 2) {
+    throw new Error('Expected parseAbortAfterArg with = to return 2');
+  }
+  if (parseAbortAfterArg(['--abort-after', 'invalid']) !== 3) {
+    throw new Error('Expected parseAbortAfterArg with invalid number to return default 3');
+  }
+  if (parseAbortAfterArg(['--abort-after', '0']) !== 3) {
+    throw new Error('Expected parseAbortAfterArg with 0 to return default 3');
+  }
+
+  const synthetic503 = {
+    name: 'ProviderError',
+    kind: 'api',
+    provider: 'gemini',
+    status: 503,
+  };
+
+  const makeMockProvider = (sequence: Array<unknown | 'ok'>): LlmProvider => {
+    let callIdx = 0;
+    return {
+      generateStructured: async () => {
+        const item = sequence[callIdx++];
+        if (item !== 'ok') {
+          throw item;
+        }
+        return {
+          data: {
+            basics: {
+              fullName: 'Candidate',
+              headline: null,
+              email: null,
+              phone: null,
+              location: null,
+              links: [],
+            },
+            summary: '',
+            experience: [],
+            projects: [],
+            education: [],
+            skills: [],
+            unslotted: [],
+          },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        } as unknown as Awaited<ReturnType<LlmProvider['generateStructured']>>;
+      },
+      generateJson: async () => {
+        throw new Error('generateJson not used');
+      },
+    };
+  };
+
+  const sampleFixturesForAbort = allTxtFiles.slice(0, 5);
+
+  // 2a: Interrupted streak (429 reset) does not abort with abortAfter=3
+  const nonConsecutiveProvider = makeMockProvider([
+    syntheticTimeout,
+    synthetic429,
+    syntheticTimeout,
+    synthetic503,
+  ]);
+  const silentLog = () => { };
+  const origLog = console.log;
+  let nonConsecutivePass: { results: FixtureEvalMetrics[]; aborted: boolean };
+  try {
+    console.log = silentLog;
+    nonConsecutivePass = await runSinglePass(
+      0,
+      1,
+      sampleFixturesForAbort.slice(0, 4),
+      nonConsecutiveProvider,
+      configuredModel,
+      0,
+      false,
+      3,
+    );
+  } finally {
+    console.log = origLog;
+  }
+  if (nonConsecutivePass.aborted || nonConsecutivePass.results.length !== 4) {
+    throw new Error(
+      `Expected non-consecutive degraded failures to not abort (aborted=${nonConsecutivePass.aborted}, count=${nonConsecutivePass.results.length})`,
+    );
+  }
+
+  // 2b: Success resets streak: timeout, 503, ok, timeout does not abort
+  const successResetProvider = makeMockProvider([
+    syntheticTimeout,
+    synthetic503,
+    'ok',
+    syntheticTimeout,
+  ]);
+  let successResetPass: { results: FixtureEvalMetrics[]; aborted: boolean };
+  try {
+    console.log = silentLog;
+    successResetPass = await runSinglePass(
+      0,
+      1,
+      sampleFixturesForAbort.slice(0, 4),
+      successResetProvider,
+      configuredModel,
+      0,
+      false,
+      3,
+    );
+  } finally {
+    console.log = origLog;
+  }
+  if (successResetPass.aborted || successResetPass.results.length !== 4) {
+    throw new Error(
+      `Expected success to reset degraded streak (aborted=${successResetPass.aborted}, count=${successResetPass.results.length})`,
+    );
+  }
+
+  // 2c: N consecutive timeout or 503 failures stops the run and prints 'aborted: API degraded' with counts
+  const abortProvider = makeMockProvider([
+    syntheticTimeout,
+    syntheticTimeout,
+    synthetic503,
+    syntheticTimeout,
+    syntheticTimeout,
+  ]);
+  const interceptedLogs: string[] = [];
+  let abortPass: { results: FixtureEvalMetrics[]; aborted: boolean };
+  try {
+    console.log = (...args: unknown[]) => {
+      interceptedLogs.push(args.map(String).join(' '));
+      origLog(...args);
+    };
+    abortPass = await runSinglePass(
+      0,
+      1,
+      sampleFixturesForAbort,
+      abortProvider,
+      configuredModel,
+      0,
+      false,
+      3,
+    );
+  } finally {
+    console.log = origLog;
+  }
+
+  if (!abortPass.aborted) {
+    throw new Error('Expected abortPass to be marked aborted=true after 3 consecutive failures');
+  }
+  if (abortPass.results.length !== 3) {
+    throw new Error(
+      `Expected abortPass to stop after 3 fixtures, executed: ${abortPass.results.length}`,
+    );
+  }
+  if (!interceptedLogs.includes('aborted: API degraded')) {
+    throw new Error(
+      `Expected 'aborted: API degraded' to be printed in output: ${JSON.stringify(interceptedLogs)}`,
+    );
+  }
+  const fcLine = interceptedLogs.find((l) => l.startsWith('[failure-counts]'));
+  if (
+    !fcLine ||
+    !fcLine.includes('timeout=2') ||
+    !fcLine.includes('api_503=1')
+  ) {
+    throw new Error(
+      `Expected failure-counts line to include timeout=2 api_503=1, got: ${fcLine}`,
+    );
+  }
+
+  // 2d: Custom abortAfter = 2 stops after 2 consecutive failures
+  const customAbortProvider = makeMockProvider([
+    syntheticTimeout,
+    synthetic503,
+    syntheticTimeout,
+  ]);
+  let customAbortPass: { results: FixtureEvalMetrics[]; aborted: boolean };
+  try {
+    console.log = silentLog;
+    customAbortPass = await runSinglePass(
+      0,
+      1,
+      sampleFixturesForAbort.slice(0, 3),
+      customAbortProvider,
+      configuredModel,
+      0,
+      false,
+      2,
+    );
+  } finally {
+    console.log = origLog;
+  }
+  if (!customAbortPass.aborted || customAbortPass.results.length !== 2) {
+    throw new Error(
+      `Expected abort-after=2 to stop after 2 fixtures, got count=${customAbortPass.results.length} aborted=${customAbortPass.aborted}`,
+    );
+  }
 }
 
 async function discoverFixtureTxtFiles(): Promise<string[]> {
@@ -1143,6 +1479,8 @@ async function main(): Promise<void> {
   const selfCheck = hasSelfCheckArg(argv);
   const runs = parseRunsArg(argv);
   const pauseMs = parsePauseMsArg(argv);
+  const abortAfter = parseAbortAfterArg(argv);
+  const only = parseOnlyArg(argv);
   const configuredModel = resolveGeminiModel(process.env);
 
   let provider: GeminiProvider | null = null;
@@ -1154,11 +1492,17 @@ async function main(): Promise<void> {
     provider = new GeminiProvider({ model: configuredModel });
   }
 
-  const txtFiles = await discoverFixtureTxtFiles();
+  const allTxtFiles = await discoverFixtureTxtFiles();
+  const txtFiles = filterFixturesByOnly(allTxtFiles, only);
+  if (only && txtFiles.length === 0) {
+    console.error(`Fixture not found for --only: ${only}`);
+    process.exit(1);
+  }
 
   const allRuns: FixtureEvalMetrics[][] = [];
+  let wasAborted = false;
   for (let r = 0; r < runs; r++) {
-    const runMetrics = await runSinglePass(
+    const passResult = await runSinglePass(
       r,
       runs,
       txtFiles,
@@ -1166,13 +1510,22 @@ async function main(): Promise<void> {
       configuredModel,
       pauseMs,
       selfCheck,
+      abortAfter,
     );
-    allRuns.push(runMetrics);
+    allRuns.push(passResult.results);
+    if (passResult.aborted) {
+      wasAborted = true;
+      break;
+    }
+  }
+
+  if (wasAborted) {
+    process.exit(1);
   }
 
   reportMultiRunDiffs(allRuns);
   if (selfCheck) {
-    await runSelfCheckFailureProbe(configuredModel);
+    await runSelfCheckFailureProbe(configuredModel, allTxtFiles);
   } else {
     reportFailureCounts(allRuns);
   }
