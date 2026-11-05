@@ -125,5 +125,16 @@
     ],
     "warnings": [],
     "low_confidence_paths": [],
-    "review_flags": []
+    "review_flags": [
+        {
+            "path": "unslotted[0]",
+            "reason": "UNSLOTTED_CONTENT",
+            "excerpt": "Data Structures, Database Systems, Software Engineering, Operating Systems."
+        },
+        {
+            "path": "unslotted[1]",
+            "reason": "UNSLOTTED_CONTENT",
+            "excerpt": "Languages: English Availability: Immediate Work Preference: Full-time"
+        }
+    ]
 }
