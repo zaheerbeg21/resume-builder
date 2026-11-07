@@ -47,7 +47,7 @@
     ],
     "projects": [
         {
-            "name": "TaskFlow",
+            "name": "TaskFlow – Task Management Application",
             "url": null,
             "bullets": [
                 "Developed a task management application with user authentication and task tracking.",
