@@ -8,6 +8,8 @@
  * - Dates (start, end) are compared as written (exact match after trimming).
  * - Link labels (basics.links[i].label) are ignored; only basics.links[i].url is compared.
  * - id, warnings, and low_confidence_paths are ignored in field accuracy scoring.
+ * - In string comparison, only a hyphen between two letters followed by one space is affected:
+ *   'word- word' and 'word-word' are treated as equal on both sides.
  * - review_flags with reason UNSLOTTED_CONTENT are compared by content coverage, not by item:
  *   the whitespace-split words of all expected excerpts and of all actual excerpts are collected
  *   (case-folded, private-use and other-symbol glyphs removed) and compared as multisets.
@@ -326,7 +328,10 @@ function normalizeStringValue(value: string | null | undefined): string | null {
     return null;
   }
   const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed.replace(/(\p{L})- (?=\p{L})/gu, '$1-');
 }
 
 function normalizeReviewFlagExcerpt(
@@ -1127,6 +1132,54 @@ async function runSelfCheckFailureProbe(
   ) {
     throw new Error(
       `Expected all-missing probe wrong=1 null=1 but got wrong=${allMissing.wrong} null=${allMissing.nullCount}`,
+    );
+  }
+
+  // String comparison: only a hyphen between two letters followed by one space is affected.
+  const hyphenMatch = probe('self-check-hyphen-match', (d) => {
+    d.summary = (expected.summary ?? '').replace(
+      'high-throughput',
+      'high- throughput',
+    );
+  });
+  expectPerfect(hyphenMatch, 'hyphen-match');
+  if (hyphenMatch.wrong !== 0 || hyphenMatch.wrongPaths.length !== 0) {
+    throw new Error(
+      `Expected hyphen-match wrong=0 with empty wrongPaths, got wrong=${hyphenMatch.wrong} wrongPaths=${JSON.stringify(hyphenMatch.wrongPaths)}`,
+    );
+  }
+
+  const hyphenDiff = probe('self-check-hyphen-diff', (d) => {
+    d.summary = (expected.summary ?? '').replace(
+      'high-throughput',
+      'high- throughpux',
+    );
+  });
+  if (
+    hyphenDiff.wrong !== 1 ||
+    hyphenDiff.nullCount !== 0 ||
+    hyphenDiff.wrongPaths[0] !== 'summary' ||
+    hyphenDiff.total !== hyphenMatch.total
+  ) {
+    throw new Error(
+      `Expected hyphen-diff probe wrong=1 at summary but got wrong=${hyphenDiff.wrong} paths=${JSON.stringify(hyphenDiff.wrongPaths)}`,
+    );
+  }
+
+  // Dash separator: 'A - B' is not between two letters without space before the hyphen, so it is unaltered.
+  const origSummary = expected.summary;
+  expected.summary = 'A - B';
+  const dashSeparator = probe('self-check-dash-separator', (d) => {
+    d.summary = 'A -B';
+  });
+  expected.summary = origSummary;
+  if (
+    dashSeparator.wrong !== 1 ||
+    dashSeparator.wrongPaths.length !== 1 ||
+    dashSeparator.wrongPaths[0] !== 'summary'
+  ) {
+    throw new Error(
+      `Expected dash-separator probe wrong=1 at summary but got wrong=${dashSeparator.wrong} paths=${JSON.stringify(dashSeparator.wrongPaths)}`,
     );
   }
 
