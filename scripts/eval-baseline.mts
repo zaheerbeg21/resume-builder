@@ -12,7 +12,8 @@
  *   'word- word' and 'word-word' are treated as equal on both sides.
  * - review_flags with reason UNSLOTTED_CONTENT are compared by content coverage, not by item:
  *   the whitespace-split words of all expected excerpts and of all actual excerpts are collected
- *   (case-folded, private-use and other-symbol glyphs removed) and compared as multisets.
+ *   (case-folded, private-use and other-symbol glyphs removed, separator punctuation replaced
+ *   with space while keeping $ % + # & @ /) and compared as multisets.
  *   The whole unslotted set counts as ONE field per fixture: correct when no expected word is
  *   missing and no actual word is surplus; wrong otherwise; also null when every expected word
  *   is missing. The missing-word and surplus-word counts are printed on a separate line per fixture
@@ -347,13 +348,21 @@ function normalizeReviewFlagExcerpt(
 // Same categories the parser drops before its unslotted grounding check (T-024 step 3a).
 const BULLET_GLYPH_REGEX = /[\p{Co}\p{So}]/gu;
 
+// Same separator punctuation the parser replaces with space (T-024 step 3c).
+const SEPARATOR_PUNCTUATION_REGEX =
+  /[,;:.\p{Pd}()\[\]{}'"`\u2018\u2019\u201C\u201D\u2212]/gu;
+
 function unslottedWords(
   flags: { reason: string; excerpt?: string | null }[],
 ): string[] {
   return flags
     .filter((f) => f.reason === 'UNSLOTTED_CONTENT')
     .flatMap((f) =>
-      (f.excerpt ?? '').replace(BULLET_GLYPH_REGEX, '').toLowerCase().split(/\s+/),
+      (f.excerpt ?? '')
+        .replace(BULLET_GLYPH_REGEX, '')
+        .replace(SEPARATOR_PUNCTUATION_REGEX, ' ')
+        .toLowerCase()
+        .split(/\s+/),
     )
     .filter((w) => w.length > 0);
 }
@@ -1133,6 +1142,66 @@ async function runSelfCheckFailureProbe(
     throw new Error(
       `Expected all-missing probe wrong=1 null=1 but got wrong=${allMissing.wrong} null=${allMissing.nullCount}`,
     );
+  }
+
+  // Unslotted punctuation: separator punctuation is replaced with space; $ % + # & @ / are kept.
+  const origReviewFlags = expected.review_flags;
+  try {
+    expected.review_flags = [
+      {
+        path: 'unslotted[0]',
+        reason: 'UNSLOTTED_CONTENT',
+        excerpt: 'A, B',
+      },
+    ];
+
+    // A, B against A; B scores 100%
+    const unslottedPunctuationMatch = probe(
+      'self-check-unslotted-punctuation-match',
+      (d) => withUnslotted(d, ['A; B']),
+    );
+    expectPerfect(unslottedPunctuationMatch, 'unslotted-punctuation-match');
+
+    // A removed word scores wrong=1
+    const unslottedRemovedWord = probe(
+      'self-check-unslotted-punctuation-removed-word',
+      (d) => withUnslotted(d, ['A;']),
+    );
+    if (
+      unslottedRemovedWord.wrong !== 1 ||
+      unslottedRemovedWord.unslottedMissing !== 1 ||
+      unslottedRemovedWord.unslottedSurplus !== 0 ||
+      unslottedRemovedWord.wrongPaths[0] !== 'review_flags'
+    ) {
+      throw new Error(
+        `Expected removed-word probe wrong=1 with missing=1, got wrong=${unslottedRemovedWord.wrong} missing=${unslottedRemovedWord.unslottedMissing}`,
+      );
+    }
+
+    // $500 against 500 scores wrong=1
+    expected.review_flags = [
+      {
+        path: 'unslotted[0]',
+        reason: 'UNSLOTTED_CONTENT',
+        excerpt: '$500',
+      },
+    ];
+    const unslottedSymbolDiff = probe(
+      'self-check-unslotted-symbol-diff',
+      (d) => withUnslotted(d, ['500']),
+    );
+    if (
+      unslottedSymbolDiff.wrong !== 1 ||
+      unslottedSymbolDiff.unslottedMissing !== 1 ||
+      unslottedSymbolDiff.unslottedSurplus !== 1 ||
+      unslottedSymbolDiff.wrongPaths[0] !== 'review_flags'
+    ) {
+      throw new Error(
+        `Expected $500 against 500 probe wrong=1, got wrong=${unslottedSymbolDiff.wrong} missing=${unslottedSymbolDiff.unslottedMissing} surplus=${unslottedSymbolDiff.unslottedSurplus}`,
+      );
+    }
+  } finally {
+    expected.review_flags = origReviewFlags;
   }
 
   // String comparison: only a hyphen between two letters followed by one space is affected.
