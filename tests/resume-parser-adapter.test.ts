@@ -839,6 +839,146 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
         'Dropped ungrounded unslotted content at unslotted[1].',
       ]);
     });
+
+    // Section 4 step 3c: separator punctuation is treated as whitespace on both sides in unslotted comparison.
+    const source3c = [
+      SAMPLE_RESUME_TEXT,
+      '',
+      'Additional Information',
+      '\uF0B7 Languages: English',
+      '\uF0B7 Availability: Immediate',
+      '\uF0B7 Work Preference: Full-time',
+    ].join('\n');
+
+    it('3c(1) keeps an unslotted item joining three source lines with semicolons, with no dropped-content warning', async () => {
+      const joinedWithSemicolons =
+        'Languages: English; Availability: Immediate; Work Preference: Full-time';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Additional Information', text: joinedWithSemicolons },
+          ],
+        }),
+      });
+
+      const result = await parseResume(source3c, provider);
+
+      expect(result.draft.review_flags).toEqual([
+        {
+          path: 'unslotted[0]',
+          reason: 'UNSLOTTED_CONTENT',
+          excerpt: joinedWithSemicolons,
+        },
+      ]);
+      expect(result.draft.warnings).toEqual([]);
+    });
+
+    it('3c(2) keeps an unslotted item joining three source lines with commas, with no dropped-content warning', async () => {
+      const joinedWithCommas =
+        'Languages: English, Availability: Immediate, Work Preference: Full-time';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Additional Information', text: joinedWithCommas },
+          ],
+        }),
+      });
+
+      const result = await parseResume(source3c, provider);
+
+      expect(result.draft.review_flags).toEqual([
+        {
+          path: 'unslotted[0]',
+          reason: 'UNSLOTTED_CONTENT',
+          excerpt: joinedWithCommas,
+        },
+      ]);
+      expect(result.draft.warnings).toEqual([]);
+    });
+
+    it('3c(3) drops an unslotted item that contains one invented word, with the exact path-only warning', async () => {
+      const textWithInventedWord =
+        'Languages: English; Availability: Immediate; Work Preference: Full-time Remote';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Additional Information', text: textWithInventedWord },
+          ],
+        }),
+      });
+
+      const result = await parseResume(source3c, provider);
+
+      expect(result.draft.review_flags).toEqual([]);
+      expect(result.draft.warnings).toEqual([
+        'Dropped ungrounded unslotted content at unslotted[0].',
+      ]);
+    });
+
+    it('3c(4) keeps an unslotted item where source has Full-time and model has Full time', async () => {
+      const textWithFullTimeSpace =
+        'Languages: English; Availability: Immediate; Work Preference: Full time';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Additional Information', text: textWithFullTimeSpace },
+          ],
+        }),
+      });
+
+      const result = await parseResume(source3c, provider);
+
+      expect(result.draft.review_flags).toEqual([
+        {
+          path: 'unslotted[0]',
+          reason: 'UNSLOTTED_CONTENT',
+          excerpt: textWithFullTimeSpace,
+        },
+      ]);
+      expect(result.draft.warnings).toEqual([]);
+    });
+
+    it('3c(5) drops an unslotted item where the model reorders two words', async () => {
+      const reorderedText =
+        'English Languages; Availability: Immediate; Work Preference: Full-time';
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Additional Information', text: reorderedText },
+          ],
+        }),
+      });
+
+      const result = await parseResume(source3c, provider);
+
+      expect(result.draft.review_flags).toEqual([]);
+      expect(result.draft.warnings).toEqual([
+        'Dropped ungrounded unslotted content at unslotted[0].',
+      ]);
+    });
+
+    it('3c(6) drops an unslotted item where source has 500 and model has $500 because symbols are kept', async () => {
+      const sourceWith500 = [
+        SAMPLE_RESUME_TEXT,
+        '',
+        'Additional Information',
+        '\uF0B7 Volunteer hours: 500',
+      ].join('\n');
+      const provider = new FakeProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            { label: 'Additional Information', text: 'Volunteer hours: $500' },
+          ],
+        }),
+      });
+
+      const result = await parseResume(sourceWith500, provider);
+
+      expect(result.draft.review_flags).toEqual([]);
+      expect(result.draft.warnings).toEqual([
+        'Dropped ungrounded unslotted content at unslotted[0].',
+      ]);
+    });
   });
 
   describe('AC 8: Post-guard URL scheme normalization, unsupported scheme rejection, and ensureUrlScheme unit cases', () => {
@@ -1119,10 +1259,10 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
     });
 
     it('never logs resume text to console on success or failure', async () => {
-      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
 
       const sentinelResume = `${SAMPLE_RESUME_TEXT}\nCONFIDENTIAL_RESUME_SENTINEL_774411`;
       const okProvider = new FakeProvider({ response: createBaseModelDraft() });
