@@ -91,10 +91,10 @@ describe('T-031 removePageFurniture helper', () => {
 
     const result = removePageFurniture(input);
 
-    expect(result.removedCount).toBe(4);
+    expect(result.removedCount).toBe(3);
     expect(result.text).not.toContain('Taylor Synthetic   Resume Page 1');
     expect(result.text).not.toContain('Taylor Synthetic   Resume Page 2');
-    expect(result.text).not.toContain('Confidential Draft');
+    expect(result.text.split('Confidential Draft').length - 1).toBe(1);
     expect(result.text).toContain('Repeated Bullet Text');
     expect(result.text).toContain('Unique Footer Page One');
     expect(result.text).toContain('Unique Footer Page Two');
@@ -597,6 +597,207 @@ describe('T-031 removePageFurniture helper', () => {
     expect(result.text).toContain('2/2');
     expect(result.text).toContain('- 1 -');
     expect(result.text).toContain('- 2 -');
+  });
+
+  it('review (1): keeps page 1 first line "Alex Example alex@example.org" when repeated verbatim on page 2 and removes the page 2 copy', () => {
+    const input = [
+      'Alex Example alex@example.org',
+      'Staff Platform Engineer',
+      'Summary',
+      'Built fault-tolerant storage systems.',
+      'Experience',
+      'Example Corp | 2021-01 - Present',
+      'Page 1 Footer Unique',
+      '-- 1 of 2 --',
+      'Alex Example alex@example.org',
+      'Fictional Labs | 2018-04 - 2020-12',
+      '- Shipped metrics pipeline.',
+      'Education',
+      'Example University | B.S. CS',
+      'Skills: Go, TypeScript',
+      'Page 2 Footer Unique',
+      '-- 2 of 2 --',
+    ].join('\n');
+
+    const result = removePageFurniture(input);
+    const lines = result.text.split(/\r?\n/);
+
+    expect(lines[0]).toBe('Alex Example alex@example.org');
+    expect(result.text.split('Alex Example alex@example.org').length - 1).toBe(1);
+  });
+
+  it('review (2): removes all copies of bottom-edge "Seite 1 von 2" / "Seite 2 von 2" and "Página 1 de 3"', () => {
+    const germanInput = [
+      'Morgan Synthetic',
+      'Summary',
+      'Built search pipelines.',
+      'Experience',
+      'Example Corp | 2020 - Present',
+      '- Reduced query latency.',
+      'Seite 1 von 2',
+      '-- 1 of 2 --',
+      'Education',
+      'Example University | B.S. CS',
+      'Skills',
+      'Languages: TypeScript, Rust',
+      'Projects',
+      'KvStore',
+      'Seite 2 von 2',
+      '-- 2 of 2 --',
+    ].join('\n');
+
+    const deRes = removePageFurniture(germanInput);
+
+    expect(deRes.removedCount).toBe(2);
+    expect(deRes.text).not.toContain('Seite 1 von 2');
+    expect(deRes.text).not.toContain('Seite 2 von 2');
+
+    const spanishInput = [
+      'Morgan Synthetic',
+      'Summary',
+      'Built search pipelines.',
+      'Experience',
+      'Example Corp | 2020 - Present',
+      '- Reduced query latency.',
+      'Página 1 de 3',
+      '-- 1 of 3 --',
+      'Fictional Labs | 2017 - 2020',
+      '- Built ingestion queue.',
+      'Projects',
+      'KvStore',
+      '- Added checkpointing.',
+      'StreamIndex',
+      'Página 2 de 3',
+      '-- 2 of 3 --',
+      'Education',
+      'Example University | B.S. CS',
+      'Skills',
+      'Languages: TypeScript, Rust',
+      'Certifications',
+      'Systems Design',
+      'Página 3 de 3',
+      '-- 3 of 3 --',
+    ].join('\n');
+
+    const esRes = removePageFurniture(spanishInput);
+
+    expect(esRes.removedCount).toBe(3);
+    expect(esRes.text).not.toContain('Página 1 de 3');
+    expect(esRes.text).not.toContain('Página 2 de 3');
+    expect(esRes.text).not.toContain('Página 3 de 3');
+  });
+
+  it('review (3): a page with 5 non-empty lines does not use its body as bottom candidates', () => {
+    const input = [
+      'Taylor Fictional',
+      'Summary',
+      'Built replication engines.',
+      'Experience',
+      'Example Corp | 2021 - Present',
+      '- Handled failover.',
+      'Skills: Rust, Go',
+      'Repeated Body Clause Alpha',
+      '-- 1 of 2 --',
+      'Page Two Header',
+      'Fictional Systems | Engineer',
+      'Repeated Body Clause Alpha',
+      '- Verified distributed snapshots.',
+      'Page Two Unique End',
+      '-- 2 of 2 --',
+    ].join('\n');
+
+    const result = removePageFurniture(input);
+
+    expect(result.removedCount).toBe(0);
+    expect(result.text.split('Repeated Body Clause Alpha').length - 1).toBe(2);
+    expect(result.text).toContain('Repeated Body Clause Alpha');
+  });
+
+  it('review (4): in a 3-page document where a header appears on pages 1 and 3 only, page 1 copy survives', () => {
+    const input = [
+      'Morgan Synthetic | morgan@example.org',
+      'Summary',
+      'Built distributed ledgers.',
+      'Experience',
+      'Example Corp | 2021 - Present',
+      '- Led consensus upgrade.',
+      'Page 1 Unique Footer',
+      '-- 1 of 3 --',
+      'Selected Projects',
+      'KvStream',
+      '- Compaction engine.',
+      'SnapshotCheck',
+      '- Offline verifier.',
+      'OpenTools',
+      'Page 2 Unique Footer',
+      '-- 2 of 3 --',
+      'Morgan Synthetic | morgan@example.org',
+      'Education',
+      'Example University | B.S. CS',
+      'Skills',
+      'Languages: TypeScript, Rust',
+      'Platform: Linux, Go',
+      'Page 3 Unique Footer',
+      '-- 3 of 3 --',
+    ].join('\n');
+
+    const result = removePageFurniture(input);
+    const lines = result.text.split(/\r?\n/);
+
+    expect(lines[0]).toBe('Morgan Synthetic | morgan@example.org');
+    expect(
+      result.text.split('Morgan Synthetic | morgan@example.org').length - 1,
+    ).toBe(1);
+  });
+
+  it('review (5): preserves "2021-03 - Present" and "2018-06 - 2021-02" in the body', () => {
+    const input = [
+      'Jordan Avery',
+      'Staff Systems Architect',
+      'Summary',
+      '2021-03 - Present',
+      'Experience',
+      'Example Corp',
+      'Page 1 Unique Bottom A',
+      'Candidate Profile Page 1',
+      '-- 1 of 2 --',
+      'Prior Experience',
+      'Northwind Labs',
+      'Role History',
+      '2021-03 - Present',
+      '2018-06 - 2021-02',
+      'Education',
+      'Page 2 Unique Bottom B',
+      'Candidate Profile Page 2',
+      '-- 2 of 2 --',
+    ].join('\n');
+
+    const result = removePageFurniture(input);
+
+    expect(result.removedCount).toBe(2);
+    expect(result.text.split('2021-03 - Present').length - 1).toBe(2);
+    expect(result.text).toContain('2018-06 - 2021-02');
+  });
+
+  it('review (7): CRLF input keeps CRLF in the output', () => {
+    const input = [
+      'Jordan Avery',
+      'Summary',
+      'Built replication services.',
+      'Example Footer Page 1',
+      '-- 1 of 2 --',
+      'Experience',
+      'Example Corp | 2021 - Present',
+      'Education: B.S. CS',
+      'Example Footer Page 2',
+      '-- 2 of 2 --',
+    ].join('\r\n');
+
+    const result = removePageFurniture(input);
+
+    expect(result.removedCount).toBe(2);
+    expect(result.text).toContain('\r\n');
+    expect(result.text.replaceAll('\r\n', '')).not.toContain('\n');
   });
 });
 

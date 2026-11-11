@@ -240,7 +240,7 @@ export async function parseResume(
 
   if (
     flaggedDraft.basics.email === null &&
-    hasEmailShapedTokenOnLine(cleanedSource)
+    hasEmailShapedTokenOnLine(sourceText)
   ) {
     postWarnings.push(
       'Email-shaped text found in the source but no email was extracted.',
@@ -249,7 +249,7 @@ export async function parseResume(
 
   if (
     (flaggedDraft.basics.phone ?? null) === null &&
-    hasPhoneShapedTokenOnLine(cleanedSource)
+    hasPhoneShapedTokenOnLine(sourceText)
   ) {
     postWarnings.push(
       'Phone-shaped text found in the source but no phone was extracted.',

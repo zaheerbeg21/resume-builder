@@ -1509,5 +1509,52 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
       expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
     });
+
+    it('review (6): emits missing-email warning when email appears only on a removed footer line and draft email is null', async () => {
+      const footerOnlyEmailSource = [
+        'Jordan Avery',
+        'Staff Systems Architect',
+        'Stonehaven, EX | https://example.org/portfolio',
+        'Summary',
+        'Built distributed storage engines and low-latency replication pipelines across regional clusters.',
+        'Fictional Dossier | jordan.avery@example.org | Page 1 of 2',
+        '',
+        '-- 1 of 2 --',
+        '',
+        'Experience',
+        'Example Corp | Staff Systems Architect | 2021-03 - Present',
+        '- Designed consensus state machine handling 45000 writes per second across three zones.',
+        'Northwind Labs | Senior Backend Developer | 2018-06 - 2021-02',
+        '- Migrated ledger service to partitioned storage reducing tail latency by 35 percent.',
+        'Education',
+        'Westbrook Institute of Technology | B.S. Computer Engineering | 2014 - 2018',
+        'Skills',
+        'Languages: TypeScript, Rust, SQL',
+        'Fictional Dossier | jordan.avery@example.org | Page 2 of 2',
+        '',
+        '-- 2 of 2 --',
+      ].join('\n');
+
+      const draftWithoutEmail = createBaseModelDraft({
+        basics: {
+          fullName: 'Jordan Avery',
+          headline: 'Staff Systems Architect',
+          email: null,
+          phone: null,
+          location: 'Stonehaven, EX',
+          links: [
+            { label: 'Portfolio', url: 'https://example.org/portfolio' },
+          ],
+        },
+      });
+      const provider = new SpyProvider({ response: draftWithoutEmail });
+
+      const result = await parseResume(footerOnlyEmailSource, provider);
+
+      expect(result.draft.basics.email).toBeNull();
+      expect(result.draft.warnings).toContain(
+        'Email-shaped text found in the source but no email was extracted.',
+      );
+    });
   });
 });

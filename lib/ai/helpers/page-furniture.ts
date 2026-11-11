@@ -1,8 +1,11 @@
 const EDGE_LINE_WINDOW = 3; // starting value, tuned on corpus
 const PAGE_MARKER_LINE_REGEX = /^\s*--\s+\d+\s+of\s+\d+\s+--\s*$/;
+// Structural "<word> N <connector> M" pagination shape across languages (e.g. Page 1 of 2, Seite 1 von 2, Página 1 de 3).
+const PAGINATED_PAIR_REGEX =
+  /(?<![\p{L}\d])(\p{L}{2,12})(\s+)\d{1,3}(?![-./]\d)(\s+\p{L}{1,4}\s+)\d{1,3}(?![-./]\d)(?!\p{L})/gu;
 const EXPLICIT_PAGE_TOKEN_REGEX =
-  /\b(page|pg\.?|p\.)(\s*)\d+(?!-\d|\.\d)(?:(\s+of\s+)\d+(?!-\d|\.\d))?\b/gi;
-const CJK_PAGE_TOKEN_REGEX = /第(\s*)\d+(\s*)ページ/g;
+  /(?<![\p{L}\d/])(page|pg\.?|p\.|seite|p[aá]gina)(\s*)\d+(?![-./]\d|\p{L})/giu;
+const CJK_PAGE_TOKEN_REGEX = /第(\s*)\d+(\s*)(ページ|頁|页)/g;
 const INLINE_PAGE_OF_TOKEN_REGEX =
   /(?:^|(?<=\s))page\s+\d+\s+of\s+\d+(?=$|\s)/gi;
 
@@ -11,17 +14,45 @@ export interface PageFurnitureResult {
   removedCount: number;
 }
 
-function normalizeEdgeLine(line: string): string {
-  return line
+interface NormalizedEdgeLine {
+  key: string;
+  hasPagination: boolean;
+}
+
+interface EdgeKeyStats {
+  count: number;
+  firstPage: number;
+  hasPagination: boolean;
+}
+
+function normalizeEdgeLine(line: string): NormalizedEdgeLine {
+  let hasPagination = false;
+  const key = line
     .trim()
     .replace(/\s+/g, ' ')
     .toLowerCase()
     .replace(
-      EXPLICIT_PAGE_TOKEN_REGEX,
-      (_match, prefix: string, sep: string, ofPart?: string) =>
-        ofPart ? `${prefix}${sep}#${ofPart}#` : `${prefix}${sep}#`,
+      PAGINATED_PAIR_REGEX,
+      (_match, word: string, s1: string, conn: string) => {
+        hasPagination = true;
+        return `${word}${s1}#${conn}#`;
+      },
     )
-    .replace(CJK_PAGE_TOKEN_REGEX, '第$1#$2ページ');
+    .replace(
+      EXPLICIT_PAGE_TOKEN_REGEX,
+      (_match, prefix: string, sep: string) => {
+        hasPagination = true;
+        return `${prefix}${sep}#`;
+      },
+    )
+    .replace(
+      CJK_PAGE_TOKEN_REGEX,
+      (_match, s1: string, s2: string, unit: string) => {
+        hasPagination = true;
+        return `第${s1}#${s2}${unit}`;
+      },
+    );
+  return { key, hasPagination };
 }
 
 function normalizeInlinePageOfToken(token: string): string {
@@ -81,10 +112,43 @@ function getPageEdgeIndices(pageLines: string[]): {
       nonEmpty.push(i);
     }
   }
+  // Reserve at least one body line and keep top/bottom edge windows disjoint on short pages.
+  const edgeWindow = Math.min(
+    EDGE_LINE_WINDOW,
+    Math.floor((nonEmpty.length - 1) / 2),
+  );
+  if (edgeWindow <= 0) {
+    return {
+      topIndices: new Set<number>(),
+      bottomIndices: new Set<number>(),
+    };
+  }
   return {
-    topIndices: new Set(nonEmpty.slice(0, EDGE_LINE_WINDOW)),
-    bottomIndices: new Set(nonEmpty.slice(-EDGE_LINE_WINDOW)),
+    topIndices: new Set(nonEmpty.slice(0, edgeWindow)),
+    bottomIndices: new Set(nonEmpty.slice(-edgeWindow)),
   };
+}
+
+function recordEdgeStats(
+  pageLines: string[],
+  indices: Set<number>,
+  pageIdx: number,
+  stats: Map<string, EdgeKeyStats>,
+): void {
+  const seenOnPage = new Map<string, boolean>();
+  for (const idx of indices) {
+    const { key, hasPagination } = normalizeEdgeLine(pageLines[idx]);
+    seenOnPage.set(key, (seenOnPage.get(key) ?? false) || hasPagination);
+  }
+  for (const [key, hasPagination] of seenOnPage) {
+    const existing = stats.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.hasPagination = existing.hasPagination || hasPagination;
+    } else {
+      stats.set(key, { count: 1, firstPage: pageIdx, hasPagination });
+    }
+  }
 }
 
 /**
@@ -99,25 +163,13 @@ export function removePageFurniture(text: string): PageFurnitureResult {
   }
 
   const pageEdges = pages.map(getPageEdgeIndices);
-  const topCounts = new Map<string, number>();
-  const bottomCounts = new Map<string, number>();
+  const topStats = new Map<string, EdgeKeyStats>();
+  const bottomStats = new Map<string, EdgeKeyStats>();
 
   pages.forEach((pageLines, pageIdx) => {
     const { topIndices, bottomIndices } = pageEdges[pageIdx];
-    const seenTop = new Set<string>();
-    const seenBottom = new Set<string>();
-    for (const idx of topIndices) {
-      seenTop.add(normalizeEdgeLine(pageLines[idx]));
-    }
-    for (const idx of bottomIndices) {
-      seenBottom.add(normalizeEdgeLine(pageLines[idx]));
-    }
-    for (const key of seenTop) {
-      topCounts.set(key, (topCounts.get(key) ?? 0) + 1);
-    }
-    for (const key of seenBottom) {
-      bottomCounts.set(key, (bottomCounts.get(key) ?? 0) + 1);
-    }
+    recordEdgeStats(pageLines, topIndices, pageIdx, topStats);
+    recordEdgeStats(pageLines, bottomIndices, pageIdx, bottomStats);
   });
 
   const keptPageLines: Array<{
@@ -130,13 +182,21 @@ export function removePageFurniture(text: string): PageFurnitureResult {
   pages.forEach((pageLines, pageIdx) => {
     const { topIndices, bottomIndices } = pageEdges[pageIdx];
     pageLines.forEach((line, idx) => {
-      const key =
-        topIndices.has(idx) || bottomIndices.has(idx)
-          ? normalizeEdgeLine(line)
-          : '';
-      const isRepeatedTop = topIndices.has(idx) && (topCounts.get(key) ?? 0) >= 2;
+      const inTop = topIndices.has(idx);
+      const inBottom = bottomIndices.has(idx);
+      const key = inTop || inBottom ? normalizeEdgeLine(line).key : '';
+      const topStat = inTop ? topStats.get(key) : undefined;
+      const bottomStat = inBottom ? bottomStats.get(key) : undefined;
+
+      // Remove all copies when a pagination token is present; keep the earliest copy for verbatim repeats.
+      const isRepeatedTop =
+        topStat !== undefined &&
+        topStat.count >= 2 &&
+        (topStat.hasPagination || pageIdx > topStat.firstPage);
       const isRepeatedBottom =
-        bottomIndices.has(idx) && (bottomCounts.get(key) ?? 0) >= 2;
+        bottomStat !== undefined &&
+        bottomStat.count >= 2 &&
+        (bottomStat.hasPagination || pageIdx > bottomStat.firstPage);
 
       if (isRepeatedTop || isRepeatedBottom) {
         removedCount += 1;
