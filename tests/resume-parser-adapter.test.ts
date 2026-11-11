@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const callOrder: string[] = [];
@@ -1310,6 +1312,202 @@ describe('T-024 LLM Resume Parser (Stage 1, plain text)', () => {
 
       const parsed = ResumeImportDraftSchema.safeParse(result.draft);
       expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('T-031: Page furniture removal before model call', () => {
+    const twoPageSource = [
+      'Jordan Avery',
+      'Staff Systems Architect',
+      'jordan.avery@example.org | +1 (555) 014-8821 | Stonehaven, EX',
+      'Links: example.org/me | https://example.org/portfolio',
+      'Summary',
+      'Built distributed storage engines and low-latency replication pipelines across regional clusters.',
+      'Page 1 of 2   Fictional Dossier   Jordan Avery',
+      '',
+      '-- 1 of 2 --',
+      '',
+      'Experience',
+      'Example Corp | Staff Systems Architect | 2021-03 - Present',
+      '- Designed consensus state machine handling 45000 writes per second across three zones.',
+      'Northwind Labs | Senior Backend Developer | 2018-06 - 2021-02',
+      '- Migrated ledger service to partitioned storage reducing tail latency by 35 percent.',
+      'Education',
+      'Westbrook Institute of Technology | B.S. Computer Engineering | 2014 - 2018',
+      'Lakeside Polytechnic | Certificate in Distributed Computing | 2019 - 2020',
+      'Skills',
+      'Languages: TypeScript, Rust, SQL',
+      'Page 2 of 2   Fictional Dossier   Jordan Avery',
+      '',
+      '-- 2 of 2 --',
+    ].join('\n');
+
+    it('strips page markers and repeated footer lines before calling provider and adds count-only warning', async () => {
+      const provider = new SpyProvider({ response: createBaseModelDraft() });
+
+      const result = await parseResume(twoPageSource, provider);
+
+      expect(provider.calls).toHaveLength(1);
+      expect(provider.calls[0].prompt).not.toContain('-- 1 of 2 --');
+      expect(provider.calls[0].prompt).not.toContain('-- 2 of 2 --');
+      expect(provider.calls[0].prompt).not.toContain('Fictional Dossier');
+      expect(provider.calls[0].prompt).toContain('Jordan Avery');
+      expect(result.draft.warnings).toContain('Removed 2 repeated page lines.');
+      expect(result.draft.warnings.join(' ')).not.toContain('Fictional Dossier');
+    });
+
+    it('passes cleaned text (without markers or repeated footers) to unslotted grounding check and guardProvenance', async () => {
+      const guardSpy = vi.mocked(guardProvenance);
+      guardSpy.mockClear();
+
+      const provider = new SpyProvider({
+        response: createBaseModelDraft({
+          unslotted: [
+            {
+              label: 'Footer',
+              text: 'Page 1 of 2   Fictional Dossier   Jordan Avery',
+            },
+          ],
+        }),
+      });
+
+      const result = await parseResume(twoPageSource, provider);
+
+      expect(result.draft.review_flags).toEqual([]);
+      expect(result.draft.warnings).toContain(
+        'Dropped ungrounded unslotted content at unslotted[0].',
+      );
+      expect(guardSpy).toHaveBeenCalledTimes(1);
+      const passedSource = guardSpy.mock.calls[0][1];
+      expect(passedSource).not.toContain('-- 1 of 2 --');
+      expect(passedSource).not.toContain('Fictional Dossier');
+    });
+
+    it('cleans fixture 07 and its swap twin so repeated footers produce no UNSLOTTED_CONTENT flags and preserve swap invariance', async () => {
+      const fixturesDir = path.join(
+        process.cwd(),
+        'tests',
+        'fixtures',
+        'eval',
+        'resumes',
+      );
+      const text07 = fs.readFileSync(
+        path.join(fixturesDir, '07-repeated-footers.txt'),
+        'utf8',
+      );
+      const text07Swap = fs.readFileSync(
+        path.join(fixturesDir, '07-repeated-footers-swap.txt'),
+        'utf8',
+      );
+      const expected07 = JSON.parse(
+        fs.readFileSync(
+          path.join(fixturesDir, '07-repeated-footers.expected.json'),
+          'utf8',
+        ),
+      ) as Omit<ModelDraft, 'unslotted'>;
+
+      const modelBase: ModelDraft = {
+        ...expected07,
+        unslotted: [
+          {
+            label: 'Footer',
+            text: 'Page 1 of 2   Example Corp Candidate Dossier   Avery Placeholder   avery.placeholder@example.org',
+          },
+        ],
+      };
+      const modelSwap: ModelDraft = JSON.parse(
+        JSON.stringify({
+          ...expected07,
+          unslotted: [
+            {
+              label: 'Footer',
+              text: 'Page 1 of 2   Sample Industries Candidate Dossier   Blake Mock   blake.mock@example.org',
+            },
+          ],
+        })
+          .replaceAll('Avery Placeholder', 'Blake Mock')
+          .replaceAll('avery.placeholder@example.org', 'blake.mock@example.org')
+          .replaceAll('+1-555-0173', '+1-555-0273')
+          .replaceAll('Example City', 'Sample Town')
+          .replaceAll('https://example.org/avery', 'https://example.org/blake')
+          .replaceAll('Example Corp', 'Sample Industries')
+          .replaceAll('Fictional Labs', 'Synthetic Systems')
+          .replaceAll('Example University', 'Sample College'),
+      );
+
+      const spyBase = new SpyProvider({ response: modelBase });
+      const spySwap = new SpyProvider({ response: modelSwap });
+
+      const resBase = await parseResume(text07, spyBase);
+      const resSwap = await parseResume(text07Swap, spySwap);
+
+      expect(spyBase.calls[0].prompt).not.toContain('Candidate Dossier');
+      expect(spySwap.calls[0].prompt).not.toContain('Candidate Dossier');
+      expect(spyBase.calls[0].prompt).not.toContain('Page 1 of 2');
+      expect(spyBase.calls[0].prompt).not.toContain('Page 2 of 2');
+      expect(spySwap.calls[0].prompt).not.toContain('Page 1 of 2');
+      expect(spySwap.calls[0].prompt).not.toContain('Page 2 of 2');
+      expect(spyBase.calls[0].prompt).toContain('Avery Placeholder');
+      expect(spyBase.calls[0].prompt).toContain('+1-555-0173');
+      expect(spySwap.calls[0].prompt).toContain('Blake Mock');
+      expect(spySwap.calls[0].prompt).toContain('+1-555-0273');
+      expect(resBase.draft.review_flags).toEqual([]);
+      expect(resSwap.draft.review_flags).toEqual([]);
+      expect(resBase.draft.warnings).toContain('Removed 2 repeated page lines.');
+      expect(resSwap.draft.warnings).toContain('Removed 2 repeated page lines.');
+    });
+
+    it('Gap A: removes page markers on a two-page resume with no repeated edge lines and emits zero removal warnings', async () => {
+      const markerOnlyTwoPage = [
+        'Jordan Avery',
+        'Staff Systems Architect',
+        'jordan.avery@example.org | +1 (555) 014-8821 | Stonehaven, EX',
+        'Links: example.org/me | https://example.org/portfolio',
+        'Summary',
+        'Built distributed storage engines and low-latency replication pipelines across regional clusters.',
+        '',
+        '-- 1 of 2 --',
+        '',
+        'Experience',
+        'Example Corp | Staff Systems Architect | 2021-03 - Present',
+        '- Designed consensus state machine handling 45000 writes per second across three zones.',
+        'Northwind Labs | Senior Backend Developer | 2018-06 - 2021-02',
+        '- Migrated ledger service to partitioned storage reducing tail latency by 35 percent.',
+        'Education',
+        'Westbrook Institute of Technology | B.S. Computer Engineering | 2014 - 2018',
+        'Lakeside Polytechnic | Certificate in Distributed Computing | 2019 - 2020',
+        'Skills',
+        'Languages: TypeScript, Rust, SQL',
+        '',
+        '-- 2 of 2 --',
+      ].join('\n');
+      const provider = new SpyProvider({ response: createBaseModelDraft() });
+
+      const result = await parseResume(markerOnlyTwoPage, provider);
+
+      expect(provider.calls).toHaveLength(1);
+      expect(provider.calls[0].prompt).not.toContain('-- 1 of 2 --');
+      expect(provider.calls[0].prompt).not.toContain('-- 2 of 2 --');
+      expect(provider.calls[0].prompt).toContain('Jordan Avery');
+      expect(result.draft.warnings).toEqual([]);
+    });
+
+    it('Gap E: preserves original two-page input string without mutation and logs nothing during page-furniture removal', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+      const inputCopy = `${twoPageSource}`;
+      const provider = new SpyProvider({ response: createBaseModelDraft() });
+
+      await parseResume(inputCopy, provider);
+
+      expect(inputCopy).toBe(twoPageSource);
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
     });
   });
 });

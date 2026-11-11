@@ -10,6 +10,9 @@ Example Corp
 Designed automated node provisioning controller reducing cluster scale-up latency by 52%.
 Implemented eBPF packet filtering policies across 4,000 production hosts.
 Page 1 of 2   Example Corp Candidate Dossier   Avery Placeholder   avery.placeholder@example.org
+
+-- 1 of 2 --
+
 Avery Placeholder   avery.placeholder@example.org   +1-555-0173   Page 2 of 2
 2018-05 - 2021-01
 Fictional Labs   Example City
@@ -23,4 +26,6 @@ SKILLS
 Platform: Kubernetes, Linux, Terraform
 Languages: Go, C, Python
 Page 2 of 2   Example Corp Candidate Dossier   Avery Placeholder   avery.placeholder@example.org
+
+-- 2 of 2 --
 
