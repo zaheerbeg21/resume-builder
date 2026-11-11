@@ -5,6 +5,7 @@ import {
   hasEmailShapedTokenOnLine,
   hasPhoneShapedTokenOnLine,
 } from '@/lib/ai/helpers/grammars';
+import { removePageFurniture } from '@/lib/ai/helpers/page-furniture';
 import {
   RESUME_IMPORT_SYSTEM_PROMPT,
   buildResumePrompt,
@@ -127,9 +128,11 @@ export async function parseResume(
     throw new ParseError('empty_input', 'Resume source text is empty.');
   }
 
+  const { text: cleanedSource, removedCount } = removePageFurniture(sourceText);
+
   const generation = await provider.generateStructured({
     systemPrompt: RESUME_IMPORT_SYSTEM_PROMPT,
-    prompt: buildResumePrompt(sourceText),
+    prompt: buildResumePrompt(cleanedSource),
     schema: ModelDraftSchema,
   });
 
@@ -137,11 +140,15 @@ export async function parseResume(
   const initialWarnings: string[] = [];
   const initialReviewFlags: ReviewFlag[] = [];
 
+  if (removedCount > 0) {
+    initialWarnings.push(`Removed ${removedCount} repeated page lines.`);
+  }
+
   if (isModelDraftEmpty(modelDraft)) {
     initialWarnings.push('Model returned no extractable content.');
   }
 
-  const normalizedSource = collapseWhitespaceLower(sourceText);
+  const normalizedSource = collapseWhitespaceLower(cleanedSource);
   modelDraft.unslotted.forEach((item, index) => {
     const normalizedExcerpt = collapseWhitespaceLower(item.text);
     if (
@@ -196,7 +203,7 @@ export async function parseResume(
 
   const { draft: guardedDraft, report: provenance } = guardProvenance(
     assembledDraft,
-    sourceText,
+    cleanedSource,
   );
 
   const flaggedDraft = flagOverLimitContent(guardedDraft);
@@ -233,7 +240,7 @@ export async function parseResume(
 
   if (
     flaggedDraft.basics.email === null &&
-    hasEmailShapedTokenOnLine(sourceText)
+    hasEmailShapedTokenOnLine(cleanedSource)
   ) {
     postWarnings.push(
       'Email-shaped text found in the source but no email was extracted.',
@@ -242,7 +249,7 @@ export async function parseResume(
 
   if (
     (flaggedDraft.basics.phone ?? null) === null &&
-    hasPhoneShapedTokenOnLine(sourceText)
+    hasPhoneShapedTokenOnLine(cleanedSource)
   ) {
     postWarnings.push(
       'Phone-shaped text found in the source but no phone was extracted.',
