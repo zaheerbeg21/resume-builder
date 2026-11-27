@@ -3,6 +3,7 @@ import React from 'react';
 import { renderToBuffer, Document, Page, View, Text, Font, Image, Svg } from '@react-pdf/renderer';
 import { PDFParse, type TextResult } from 'pdf-parse';
 import { registerFonts } from '@/lib/pdf/fonts';
+import { lintExtractedText } from '@/lib/pdf/lint';
 import { ResumeDocument } from '@/lib/pdf/templates/standard';
 import { ResumeSchema, type Resume } from '@/types/resume';
 
@@ -769,5 +770,61 @@ describe('Criterion 9: Class-Based pdf-parse v2 API', () => {
     } finally {
       await parser.destroy();
     }
+  });
+});
+
+describe('T-035: Standard Template Projects Section', () => {
+  it('renders Projects, project names, and bullets in reading order between Experience and Education and passes lintExtractedText()', async () => {
+    registerFonts();
+    const resumeWithProjects: Resume = {
+      ...spikeBasic,
+      projects: [
+        {
+          id: 'proj-std-1',
+          name: 'FlowStream Telemetry',
+          url: 'https://flowstream.example.com',
+          bullets: [
+            'Processed 50M telemetry events per day with zero message loss.',
+            'Built deterministic replay tooling for distributed log inspection.',
+          ],
+        },
+      ],
+    };
+
+    const buffer = await renderResumeToBuffer(resumeWithProjects);
+    const result = await extractTextWithPdfParse(buffer);
+    const normalized = normalizeText(result.text);
+
+    assertInOrder(normalized, [
+      'Experience',
+      spikeBasic.experience[0].company,
+      'Projects',
+      'FlowStream Telemetry',
+      'Processed 50M telemetry events per day with zero message loss.',
+      'Built deterministic replay tooling for distributed log inspection.',
+      'Education',
+      spikeBasic.education[0].school,
+      'Skills',
+    ]);
+
+    const lintResult = lintExtractedText(result.text, resumeWithProjects);
+    expect(lintResult.passed).toBe(true);
+    expect(lintResult.errors).toEqual([]);
+  });
+
+  it('omits Projects heading when resume.projects is empty', async () => {
+    registerFonts();
+    const resumeWithoutProjects: Resume = {
+      ...spikeBasic,
+      projects: [],
+    };
+
+    const buffer = await renderResumeToBuffer(resumeWithoutProjects);
+    const result = await extractTextWithPdfParse(buffer);
+    const normalized = normalizeText(result.text);
+
+    expect(normalized).not.toContain('Projects');
+    const lintResult = lintExtractedText(result.text, resumeWithoutProjects);
+    expect(lintResult.passed).toBe(true);
   });
 });

@@ -100,6 +100,10 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: 'bold',
   },
+  projectName: {
+    fontSize: 10.5,
+    fontWeight: 'bold',
+  },
   date: {
     fontSize: 9.5,
     color: '#4B5563',
@@ -166,6 +170,24 @@ export function ResumeDocument({ resume }: { resume: Resume }): React.ReactEleme
                   {formatResumeDate(exp.start, exp.end, exp.current)}
                 </Text>
                 {exp.bullets.map((bullet, idx) => (
+                  <View key={idx} style={styles.bulletRow}>
+                    <Text style={styles.bulletDot}>•</Text>
+                    <Text style={styles.bulletText}>{bullet}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Projects */}
+        {resume.projects && resume.projects.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>Projects</Text>
+            {resume.projects.map((proj) => (
+              <View key={proj.id} style={styles.entry}>
+                <Text style={styles.projectName}>{proj.name}</Text>
+                {proj.bullets.map((bullet, idx) => (
                   <View key={idx} style={styles.bulletRow}>
                     <Text style={styles.bulletDot}>•</Text>
                     <Text style={styles.bulletText}>{bullet}</Text>
