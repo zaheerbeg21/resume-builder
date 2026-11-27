@@ -2,9 +2,23 @@ import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { createClient } from '@/lib/db/supabase-server';
-import { JdAnalysisSchema, type JdAnalysis, type JdKeyword } from '@/lib/ai/schemas';
+import { getServiceRoleClient, hasActivePass } from '@/lib/billing/entitlements';
+import { recordUsageEvent } from '@/lib/db/usage-events';
+import { resolveGeminiModel } from '@/lib/ai/config';
+import {
+  ProviderError,
+  type GenerateResult,
+  type LlmProvider,
+} from '@/lib/ai/provider';
+import { GeminiProvider } from '@/lib/ai/providers/gemini';
+import {
+  JD_ANALYZE_PROMPT_VERSION,
+  JD_ANALYZE_SYSTEM_PROMPT,
+  buildJdPrompt,
+} from '@/lib/ai/prompts/jd-analyze';
+import { JdAnalysisSchema, type JdAnalysis } from '@/lib/ai/schemas';
 
-export const PROMPT_VERSION = 'v1';
+export const PROMPT_VERSION = JD_ANALYZE_PROMPT_VERSION;
 
 const AnalyzePayloadSchema = z.object({
   jdText: z
@@ -17,142 +31,36 @@ const AnalyzePayloadSchema = z.object({
 // In-memory cache for deterministic quick lookup
 export const jdAnalysisCache = new Map<string, JdAnalysis>();
 
-/**
- * Computes deterministic SHA-256 hash for job description + prompt version.
- */
-export function computeJdHash(rawJd: string, version: string = PROMPT_VERSION): string {
-  const normalized = rawJd.trim().toLowerCase().replace(/\s+/g, ' ');
-  return createHash('sha256').update(`${normalized}:${version}`).digest('hex');
+let providerOverride: LlmProvider | null = null;
+
+export function setProviderForTesting(provider: LlmProvider | null): void {
+  providerOverride = provider;
+}
+
+export function resolveDefaultProvider(): LlmProvider {
+  if (providerOverride) {
+    return providerOverride;
+  }
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('Missing required environment variable: GEMINI_API_KEY');
+  }
+  return new GeminiProvider({ apiKey });
 }
 
 /**
- * Standard known technical vocabulary for deterministic local extraction.
+ * Computes deterministic SHA-256 hash for job description, prompt version, provider, and model.
  */
-const KNOWN_KEYWORDS: Array<{
-  term: string;
-  aliases: string[];
-  category: JdKeyword['category'];
-  patterns: RegExp[];
-}> = [
-  { term: 'TypeScript', aliases: ['TS'], category: 'hard_skill', patterns: [/\btypescript\b/i, /\bts\b/] },
-  { term: 'JavaScript', aliases: ['JS', 'ES6'], category: 'hard_skill', patterns: [/\bjavascript\b/i, /\bjs\b/i] },
-  { term: 'React', aliases: ['React.js', 'ReactJS'], category: 'tool', patterns: [/\breact(?:\.js|js)?\b/i] },
-  { term: 'Next.js', aliases: ['NextJS', 'Next'], category: 'tool', patterns: [/\bnext(?:\.js|js)?\b/i] },
-  { term: 'Node.js', aliases: ['Node', 'NodeJS'], category: 'tool', patterns: [/\bnode(?:\.js|js)?\b/i] },
-  { term: 'Python', aliases: ['Py'], category: 'hard_skill', patterns: [/\bpython\b/i] },
-  { term: 'Go', aliases: ['Golang'], category: 'hard_skill', patterns: [/\bgolang\b/i, /\bgo\b/] },
-  { term: 'Java', aliases: [], category: 'hard_skill', patterns: [/\bjava\b/i] },
-  { term: 'C++', aliases: ['CPP'], category: 'hard_skill', patterns: [/\bc\+\+\b/i] },
-  { term: 'C#', aliases: ['CSharp', '.NET'], category: 'hard_skill', patterns: [/\bc#\b/i, /\bcsharp\b/i] },
-  { term: 'SQL', aliases: ['RDBMS'], category: 'hard_skill', patterns: [/\bsql\b/i] },
-  { term: 'PostgreSQL', aliases: ['Postgres', 'PG'], category: 'tool', patterns: [/\bpostgres(?:ql)?\b/i] },
-  { term: 'MongoDB', aliases: ['Mongo'], category: 'tool', patterns: [/\bmongo(?:db)?\b/i] },
-  { term: 'Redis', aliases: [], category: 'tool', patterns: [/\bredis\b/i] },
-  { term: 'Docker', aliases: ['Containers'], category: 'tool', patterns: [/\bdocker\b/i] },
-  { term: 'Kubernetes', aliases: ['K8s'], category: 'tool', patterns: [/\bkubernetes\b/i, /\bk8s\b/i] },
-  { term: 'AWS', aliases: ['Amazon Web Services'], category: 'tool', patterns: [/\baws\b/i, /\bamazon web services\b/i] },
-  { term: 'GCP', aliases: ['Google Cloud'], category: 'tool', patterns: [/\bgcp\b/i, /\bgoogle cloud\b/i] },
-  { term: 'Azure', aliases: ['Microsoft Azure'], category: 'tool', patterns: [/\bazure\b/i] },
-  { term: 'Git', aliases: ['GitHub', 'GitLab'], category: 'tool', patterns: [/\bgit\b/i, /\bgithub\b/i] },
-  { term: 'CI/CD', aliases: ['Continuous Integration', 'Pipelines'], category: 'method', patterns: [/\bci\/?cd\b/i, /\bcontinuous integration\b/i] },
-  { term: 'Tailwind CSS', aliases: ['Tailwind'], category: 'tool', patterns: [/\btailwind(?:css)?\b/i] },
-  { term: 'REST APIs', aliases: ['REST', 'RESTful'], category: 'method', patterns: [/\brest(?:ful)?\s*(?:api|apis)?\b/i] },
-  { term: 'GraphQL', aliases: [], category: 'tool', patterns: [/\bgraphql\b/i] },
-  { term: 'Microservices', aliases: ['Distributed Systems'], category: 'method', patterns: [/\bmicroservices\b/i, /\bdistributed systems\b/i] },
-  { term: 'Agile', aliases: ['Scrum'], category: 'method', patterns: [/\bagile\b/i, /\bscrum\b/i] },
-  { term: 'Vitest', aliases: ['Jest', 'Unit Testing'], category: 'tool', patterns: [/\bvitest\b/i, /\bjest\b/i, /\bunit testing\b/i] },
-  { term: 'System Design', aliases: ['Architecture'], category: 'domain', patterns: [/\bsystem design\b/i, /\bsoftware architecture\b/i] },
-  { term: 'Performance Optimization', aliases: ['Web Performance'], category: 'domain', patterns: [/\bperformance optimization\b/i] },
-  { term: 'Security', aliases: ['AppSec', 'Auth'], category: 'domain', patterns: [/\bsecurity\b/i, /\bappsec\b/i, /\bauthentication\b/i] },
-];
-
-/**
- * Deterministic local JD keyword and metadata extractor.
- */
-export function extractJdLocally(jdText: string): JdAnalysis {
-  // 1. Extract job title
-  let jobTitle = 'Software Engineer';
-  const firstLines = jdText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && l.length < 80);
-
-  const titleRegex = /(?:job\s*title|role|position)?[:\-]?\s*((?:Senior|Lead|Principal|Staff|Junior)?\s*(?:Full[\s-]Stack|Frontend|Backend|Systems|Software|DevOps|Platform|Cloud)?\s*(?:Engineer|Developer|Architect|Lead))/i;
-  for (const line of firstLines) {
-    const match = line.match(titleRegex);
-    if (match && match[1]) {
-      jobTitle = match[1].trim();
-      break;
-    }
-  }
-
-  // 2. Extract years of experience
-  let yearsExperience: number | null = null;
-  const expMatch = jdText.match(/(\d+)\+?\s*(?:-\s*\d+)?\s*years?(?:\s+of)?(?:\s+relevant)?\s+experience/i);
-  if (expMatch && expMatch[1]) {
-    const parsedYears = parseInt(expMatch[1], 10);
-    if (!isNaN(parsedYears) && parsedYears >= 0 && parsedYears <= 30) {
-      yearsExperience = parsedYears;
-    }
-  }
-
-  // 3. Extract education requirement
-  let education: string | null = null;
-  if (/master(?:'s)?\s+degree|\bm\.s\.\b/i.test(jdText)) {
-    education = "Master's Degree in Computer Science or related field";
-  } else if (/bachelor(?:'s)?\s+degree|\bb\.s\.\b|\bdegree in computer science\b/i.test(jdText)) {
-    education = "Bachelor's Degree in Computer Science or related field";
-  }
-
-  // 4. Extract keywords
-  const requiredSectionRegex = /(?:requirements|qualifications|must\s*have|what\s*you(?:'ll)?\s*need|minimum\s*qualifications)[\s\S]*?(?=(?:preferred|nice\s*to\s*have|bonus|benefits|about\s*us|$))/i;
-  const requiredSectionMatch = jdText.match(requiredSectionRegex);
-  const requiredText = requiredSectionMatch ? requiredSectionMatch[0] : '';
-
-  const keywords: JdKeyword[] = [];
-
-  for (const item of KNOWN_KEYWORDS) {
-    const isMatched = item.patterns.some((pattern) => pattern.test(jdText));
-    if (isMatched) {
-      const isRequired =
-        (requiredText && item.patterns.some((pattern) => pattern.test(requiredText))) ||
-        new RegExp(`(?:must|required|minimum)[^.]*\\b${item.term}\\b`, 'i').test(jdText);
-
-      keywords.push({
-        term: item.term,
-        aliases: item.aliases,
-        category: item.category,
-        importance: isRequired ? 'required' : 'preferred',
-      });
-    }
-  }
-
-  // If text contains technical terms not in standard list, harvest up to limit
-  if (keywords.length === 0) {
-    keywords.push({
-      term: 'Software Development',
-      aliases: ['Coding'],
-      category: 'hard_skill',
-      importance: 'required',
-    });
-  }
-
-  // Sort: required first, then term alphabetically, capped at 40
-  keywords.sort((a, b) => {
-    if (a.importance === b.importance) {
-      return a.term.localeCompare(b.term);
-    }
-    return a.importance === 'required' ? -1 : 1;
-  });
-
-  const cappedKeywords = keywords.slice(0, 40);
-
-  return JdAnalysisSchema.parse({
-    job_title: jobTitle,
-    years_experience: yearsExperience,
-    education,
-    keywords: cappedKeywords,
-  });
+export function computeJdHash(
+  rawJd: string,
+  version: string = PROMPT_VERSION,
+  provider: string = 'gemini',
+  model: string = resolveGeminiModel(process.env),
+): string {
+  const normalized = rawJd.trim().toLowerCase().replace(/\s+/g, ' ');
+  return createHash('sha256')
+    .update(`${normalized}:${version}:${provider}:${model}`)
+    .digest('hex');
 }
 
 export async function POST(request: Request) {
@@ -184,10 +92,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const { jdText, resumeId } = parseResult.data;
-  const jdHash = computeJdHash(jdText, PROMPT_VERSION);
+  let provider: LlmProvider;
+  try {
+    provider = resolveDefaultProvider();
+  } catch {
+    return NextResponse.json(
+      { error: 'AI analysis service is temporarily unavailable.' },
+      { status: 503 },
+    );
+  }
 
-  // 1. Check in-memory cache
+  const activeModel =
+    provider.name === 'gemini' ? resolveGeminiModel(process.env) : provider.name;
+  const { jdText, resumeId } = parseResult.data;
+  const jdHash = computeJdHash(jdText, PROMPT_VERSION, provider.name, activeModel);
+
+  // 1. Check in-memory cache (cache hits do not consume AI quota)
   if (jdAnalysisCache.has(jdHash)) {
     const cached = jdAnalysisCache.get(jdHash)!;
     return NextResponse.json(cached, {
@@ -196,7 +116,7 @@ export async function POST(request: Request) {
     });
   }
 
-  // 2. Check Supabase jd_targets table
+  // 2. Check Supabase jd_targets table (cache hits do not consume AI quota)
   try {
     const { data: dbTarget } = await supabase
       .from('jd_targets')
@@ -218,13 +138,89 @@ export async function POST(request: Request) {
     // Non-fatal if database read encounters an issue
   }
 
-  // 3. Extract keywords conforming to JdAnalysisSchema
-  const analysis = extractJdLocally(jdText);
+  // 3. Enforce per-user rate limit and AI quota on cache miss
+  const admin = getServiceRoleClient();
+  const sixtySecondsAgoIso = new Date(Date.now() - 60_000).toISOString();
+  const { count: recentCount, error: rateLimitError } = await admin
+    .from('usage_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', sixtySecondsAgoIso);
 
-  // 4. Update in-memory cache
+  if (rateLimitError) {
+    return NextResponse.json(
+      { error: 'AI analysis service is temporarily unavailable.' },
+      { status: 503 },
+    );
+  }
+
+  if ((recentCount ?? 0) >= 10) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Try again shortly.' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
+
+  const isPassActive = await hasActivePass(user.id, admin);
+  const quotaLimit = isPassActive ? 300 : 5;
+  const quotaWindowMs = isPassActive
+    ? 30 * 24 * 60 * 60 * 1000
+    : 24 * 60 * 60 * 1000;
+  const quotaSinceIso = new Date(Date.now() - quotaWindowMs).toISOString();
+
+  const { count: quotaCount, error: quotaError } = await admin
+    .from('usage_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', quotaSinceIso);
+
+  if (quotaError) {
+    return NextResponse.json(
+      { error: 'AI analysis service is temporarily unavailable.' },
+      { status: 503 },
+    );
+  }
+
+  if ((quotaCount ?? 0) >= quotaLimit) {
+    return NextResponse.json(
+      { error: 'AI quota limit reached.' },
+      { status: 429 },
+    );
+  }
+
+  // 4. Extract structured JD keywords via LlmProvider (never log JD text)
+  let generation: GenerateResult<JdAnalysis>;
+  try {
+    generation = await provider.generateStructured({
+      systemPrompt: JD_ANALYZE_SYSTEM_PROMPT,
+      prompt: buildJdPrompt(jdText),
+      schema: JdAnalysisSchema,
+    });
+  } catch (err: unknown) {
+    if (err instanceof ProviderError) {
+      if (err.kind === 'timeout') {
+        return NextResponse.json(
+          { error: 'AI analysis request timed out. Please try again.' },
+          { status: 504 },
+        );
+      }
+      return NextResponse.json(
+        { error: 'AI analysis failed. Please try again shortly.' },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json(
+      { error: 'AI analysis service is temporarily unavailable.' },
+      { status: 502 },
+    );
+  }
+
+  const analysis = generation.data;
+
+  // 5. Update in-memory cache
   jdAnalysisCache.set(jdHash, analysis);
 
-  // 5. Persist to jd_targets if resumeId is provided
+  // 6. Persist to jd_targets if resumeId is provided
   if (resumeId) {
     try {
       await supabase.from('jd_targets').insert({
@@ -237,6 +233,21 @@ export async function POST(request: Request) {
       // Non-fatal if database insert encounters an issue
     }
   }
+
+  // 7. Record telemetry event
+  await recordUsageEvent(
+    {
+      userId: user.id,
+      route: '/api/jd/analyze',
+      provider: generation.provider,
+      model: generation.model,
+      latencyMs: generation.latencyMs,
+      inputTokens: generation.inputTokens ?? null,
+      outputTokens: generation.outputTokens ?? null,
+      estCostUsd: null,
+    },
+    { adminClient: admin },
+  );
 
   return NextResponse.json(analysis, {
     status: 200,

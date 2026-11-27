@@ -1,7 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Resume } from '@/types/resume';
 import { JdAnalysisSchema, type JdAnalysis, type JdKeyword } from '@/lib/ai/schemas';
+import {
+  ProviderError,
+  type GenerateParams,
+  type GenerateResult,
+  type LlmProvider,
+} from '@/lib/ai/provider';
+import { FakeProvider } from '@/lib/ai/providers/fake';
+import { JD_ANALYZE_SYSTEM_PROMPT } from '@/lib/ai/prompts/jd-analyze';
+import { setServiceRoleClientForTesting } from '@/lib/billing/entitlements';
 import { scoreResume } from '@/lib/scoring/match';
 import { getScoreGrade } from '@/components/target/MatchScoreCard';
 import { computeResumeFormatScore } from '@/components/target/TargetLayout';
@@ -10,6 +19,7 @@ import {
   computeJdHash,
   jdAnalysisCache,
   PROMPT_VERSION,
+  setProviderForTesting,
 } from '@/app/api/jd/analyze/route';
 import * as supabaseServer from '@/lib/db/supabase-server';
 
@@ -314,9 +324,103 @@ describe('Missing Required Keywords & 1-Click Skill Additions', () => {
 describe('POST /api/jd/analyze Route', () => {
   const mockUser = { id: 'user-123', email: 'test@example.com' };
 
+  interface MockUsageEventRow {
+    user_id: string | null;
+    route: string;
+    provider: string;
+    model: string;
+    latency_ms: number | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    created_at: string;
+  }
+
+  let usageEvents: MockUsageEventRow[];
+  let activePassUsers: Set<string>;
+
+  function createMockAdminClient() {
+    return {
+      from: vi.fn((table: string) => {
+        if (table === 'entitlements') {
+          let eqUserId: string | null = null;
+          const builder = {
+            select: vi.fn(() => builder),
+            eq: vi.fn((col: string, val: unknown) => {
+              if (col === 'user_id') eqUserId = String(val);
+              return builder;
+            }),
+            gt: vi.fn(() => builder),
+            limit: vi.fn(async () => ({
+              data:
+                eqUserId && activePassUsers.has(eqUserId)
+                  ? [{ id: 'ent-1', status: 'active', expires_at: new Date(Date.now() + 86_400_000).toISOString() }]
+                  : [],
+              error: null,
+            })),
+          };
+          return builder;
+        }
+
+        if (table === 'usage_events') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn((col: string, userIdVal: unknown) => {
+                expect(col).toBe('user_id');
+                return {
+                  gte: vi.fn(async (dateCol: string, sinceIso: string) => {
+                    expect(dateCol).toBe('created_at');
+                    const sinceMs = Date.parse(sinceIso);
+                    const count = usageEvents.filter(
+                      (e) =>
+                        e.user_id === userIdVal &&
+                        Date.parse(e.created_at) >= sinceMs,
+                    ).length;
+                    return { count, error: null };
+                  }),
+                };
+              }),
+            })),
+            insert: vi.fn(async (row: Omit<MockUsageEventRow, 'created_at'>) => {
+              usageEvents.push({
+                ...row,
+                created_at: new Date().toISOString(),
+              });
+              return { error: null };
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    } as unknown as SupabaseClient;
+  }
+
+  const defaultProviderResponse: JdAnalysis = {
+    job_title: 'Senior Software Engineer',
+    years_experience: 5,
+    education: "Bachelor's Degree in Computer Science",
+    keywords: [
+      { term: 'TypeScript', aliases: ['TS'], category: 'hard_skill', importance: 'required' },
+      { term: 'React', aliases: ['React.js'], category: 'tool', importance: 'required' },
+      { term: 'Node.js', aliases: ['NodeJS'], category: 'tool', importance: 'required' },
+      { term: 'PostgreSQL', aliases: ['Postgres'], category: 'tool', importance: 'required' },
+      { term: 'Kubernetes', aliases: ['K8s'], category: 'tool', importance: 'preferred' },
+    ],
+  };
+
   beforeEach(() => {
     vi.restoreAllMocks();
     jdAnalysisCache.clear();
+    usageEvents = [];
+    activePassUsers = new Set();
+    setProviderForTesting(new FakeProvider({ response: defaultProviderResponse }));
+    setServiceRoleClientForTesting(createMockAdminClient());
+  });
+
+  afterEach(() => {
+    setProviderForTesting(null);
+    setServiceRoleClientForTesting(null);
+    vi.unstubAllEnvs();
   });
 
   it('returns 401 when user session is unauthorized', async () => {
@@ -477,7 +581,212 @@ describe('POST /api/jd/analyze Route', () => {
     const hash2 = computeJdHash(text2, PROMPT_VERSION);
     expect(hash1).toBe(hash2);
 
-    const hashDifferentVersion = computeJdHash(text1, 'v2');
+    const hashDifferentVersion = computeJdHash(text1, 'v3');
     expect(hash1).not.toBe(hashDifferentVersion);
+  });
+
+  it('changes computeJdHash when provider or model changes', () => {
+    const jd = 'Senior Full Stack Engineer with React and TypeScript.';
+    const base = computeJdHash(jd, PROMPT_VERSION, 'gemini', 'gemini-3.5-flash-lite');
+    const diffProvider = computeJdHash(jd, PROMPT_VERSION, 'openai', 'gemini-3.5-flash-lite');
+    const diffModel = computeJdHash(jd, PROMPT_VERSION, 'gemini', 'gemini-2.5-pro');
+
+    expect(base).not.toBe(diffProvider);
+    expect(base).not.toBe(diffModel);
+    expect(diffProvider).not.toBe(diffModel);
+  });
+
+  it('calls LlmProvider.generateStructured with static JD_ANALYZE_SYSTEM_PROMPT on MISS, records usage_events, and skips LLM + quota on HIT', async () => {
+    vi.spyOn(supabaseServer, 'createClient').mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: mockUser }, error: null }),
+      },
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+        insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      }),
+    } as unknown as SupabaseClient);
+
+    const spyProvider: LlmProvider = {
+      name: 'fake',
+      generateStructured: async <T>(params: GenerateParams<T>): Promise<GenerateResult<T>> => ({
+        data: params.schema.parse(defaultProviderResponse),
+        provider: 'fake',
+        model: 'fake-jd-model',
+        latencyMs: 42,
+        inputTokens: 120,
+        outputTokens: 65,
+      }),
+    };
+    const generateStructuredSpy = vi.spyOn(spyProvider, 'generateStructured');
+    setProviderForTesting(spyProvider);
+
+    const sampleJd =
+      'Job Title: Senior Software Engineer. Requirements: 5+ years TypeScript, React, Node.js, PostgreSQL.';
+
+    // Cache MISS
+    const res1 = await analyzeJdRoute(
+      new Request('http://localhost:3000/api/jd/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jdText: sampleJd }),
+      }),
+    );
+    expect(res1.status).toBe(200);
+    expect(res1.headers.get('X-Cache')).toBe('MISS');
+    expect(generateStructuredSpy).toHaveBeenCalledTimes(1);
+
+    const callArg = (generateStructuredSpy.mock.calls[0] as unknown as [{ systemPrompt: string; prompt: string }])[0];
+    expect(callArg.systemPrompt).toBe(JD_ANALYZE_SYSTEM_PROMPT);
+    expect(callArg.systemPrompt).not.toContain(sampleJd);
+    expect(callArg.prompt).toContain(sampleJd);
+    expect(callArg.prompt).toContain('<<<JD_SOURCE_BOUNDARY>>>');
+
+    expect(usageEvents).toHaveLength(1);
+    expect(usageEvents[0]).toMatchObject({
+      user_id: 'user-123',
+      route: '/api/jd/analyze',
+      provider: 'fake',
+      model: 'fake-jd-model',
+      latency_ms: 42,
+      input_tokens: 120,
+      output_tokens: 65,
+    });
+
+    // Cache HIT: zero additional LLM calls and zero additional usage_events
+    const res2 = await analyzeJdRoute(
+      new Request('http://localhost:3000/api/jd/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jdText: sampleJd }),
+      }),
+    );
+    expect(res2.status).toBe(200);
+    expect(res2.headers.get('X-Cache')).toBe('HIT');
+    expect(generateStructuredSpy).toHaveBeenCalledTimes(1);
+    expect(usageEvents).toHaveLength(1);
+  });
+
+  it('enforces 5/24h free-tier quota (429) and fails closed (503) when GEMINI_API_KEY is missing', async () => {
+    vi.spyOn(supabaseServer, 'createClient').mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: mockUser }, error: null }),
+      },
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient);
+
+    // Seed 5 usage_events > 60s ago but within 24h (so rate limit 10/60s doesn't trigger, 5/24h quota does)
+    const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
+    for (let i = 0; i < 5; i++) {
+      usageEvents.push({
+        user_id: 'user-123',
+        route: '/api/jd/analyze',
+        provider: 'fake',
+        model: 'fake',
+        latency_ms: 10,
+        input_tokens: null,
+        output_tokens: null,
+        created_at: twoMinutesAgo,
+      });
+    }
+
+    const quotaRes = await analyzeJdRoute(
+      new Request('http://localhost:3000/api/jd/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jdText: 'Unique JD text exceeding fifty characters for quota enforcement check.',
+        }),
+      }),
+    );
+    expect(quotaRes.status).toBe(429);
+    const quotaJson = await quotaRes.json();
+    expect(quotaJson.error).toBe('AI quota limit reached.');
+
+    // Missing GEMINI_API_KEY -> 503 without silent fallback
+    setProviderForTesting(null);
+    vi.stubEnv('GEMINI_API_KEY', '');
+    const unconfiguredRes = await analyzeJdRoute(
+      new Request('http://localhost:3000/api/jd/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jdText: 'Another unique JD text exceeding fifty characters for missing key check.',
+        }),
+      }),
+    );
+    expect(unconfiguredRes.status).toBe(503);
+    const unconfiguredJson = await unconfiguredRes.json();
+    expect(unconfiguredJson.error).toBe('AI analysis service is temporarily unavailable.');
+  });
+
+  it('maps ProviderError timeout to 504 and api error to 502 with sanitized JSON', async () => {
+    vi.spyOn(supabaseServer, 'createClient').mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: mockUser }, error: null }),
+      },
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient);
+
+    setProviderForTesting(
+      new FakeProvider({
+        error: new ProviderError('Upstream request timed out with secret trace', {
+          kind: 'timeout',
+          provider: 'gemini',
+        }),
+      }),
+    );
+    const timeoutRes = await analyzeJdRoute(
+      new Request('http://localhost:3000/api/jd/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jdText: 'Job description for timeout mapping verification over fifty chars.',
+        }),
+      }),
+    );
+    expect(timeoutRes.status).toBe(504);
+    const timeoutJson = await timeoutRes.json();
+    expect(timeoutJson.error).toBe('AI analysis request timed out. Please try again.');
+    expect(JSON.stringify(timeoutJson)).not.toContain('secret trace');
+
+    setProviderForTesting(
+      new FakeProvider({
+        error: new ProviderError('Upstream 500 internal stack trace', {
+          kind: 'api',
+          provider: 'gemini',
+          status: 500,
+        }),
+      }),
+    );
+    const apiErrRes = await analyzeJdRoute(
+      new Request('http://localhost:3000/api/jd/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jdText: 'Job description for api error mapping verification over fifty chars.',
+        }),
+      }),
+    );
+    expect(apiErrRes.status).toBe(502);
+    const apiErrJson = await apiErrRes.json();
+    expect(apiErrJson.error).toBe('AI analysis failed. Please try again shortly.');
+    expect(JSON.stringify(apiErrJson)).not.toContain('internal stack trace');
   });
 });
