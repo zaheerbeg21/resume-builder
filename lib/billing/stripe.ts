@@ -88,6 +88,7 @@ export async function createCheckoutSession(
   formData.append('line_items[0][quantity]', '1');
   formData.append('client_reference_id', params.userId);
   formData.append('metadata[userId]', params.userId);
+  formData.append('payment_intent_data[metadata][userId]', params.userId);
   formData.append('success_url', `${appUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`);
   formData.append('cancel_url', `${appUrl}/billing?canceled=true`);
 

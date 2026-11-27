@@ -1,7 +1,9 @@
 import React from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST as exportPdfRoute } from '@/app/api/pdf/export/route';
 import { lintExtractedText, findHeadingIndex } from '@/lib/pdf/lint';
+import { setServiceRoleClientForTesting } from '@/lib/billing/entitlements';
 import * as supabaseServer from '@/lib/db/supabase-server';
 import { useResumeStore } from '@/lib/stores/resume-store';
 import type { Resume } from '@/types/resume';
@@ -228,6 +230,68 @@ describe('POST /api/pdf/export Route Handler', () => {
 
   let db: MockResumeRow[];
   let currentUser: { id: string; email: string } | null;
+  let activePassUsers: Set<string>;
+  let usageEvents: Array<{ user_id: string | null; route: string; model: string }>;
+
+  function createMockAdminClient() {
+    return {
+      from: vi.fn((table: string) => {
+        if (table === 'entitlements') {
+          let eqUserId: string | null = null;
+          const builder = {
+            select: vi.fn(() => builder),
+            eq: vi.fn((col: string, val: unknown) => {
+              if (col === 'user_id') eqUserId = String(val);
+              return builder;
+            }),
+            gt: vi.fn(() => builder),
+            limit: vi.fn(async () => ({
+              data: eqUserId && activePassUsers.has(eqUserId)
+                ? [{ id: 'ent-1', status: 'active', expires_at: new Date(Date.now() + 86_400_000).toISOString() }]
+                : [],
+              error: null,
+            })),
+          };
+          return builder;
+        }
+
+        if (table === 'usage_events') {
+          let filterUserId: string | null = null;
+          let filterRoute: string | null = null;
+          return {
+            select: vi.fn(() => {
+              const countBuilder = {
+                eq: vi.fn((col: string, val: unknown) => {
+                  if (col === 'user_id') filterUserId = String(val);
+                  if (col === 'route') filterRoute = String(val);
+                  return countBuilder;
+                }),
+                then: (resolve: (val: { count: number; error: null }) => void) => {
+                  const count = usageEvents.filter(
+                    (e) =>
+                      (!filterUserId || e.user_id === filterUserId) &&
+                      (!filterRoute || e.route === filterRoute)
+                  ).length;
+                  resolve({ count, error: null });
+                },
+              };
+              return countBuilder;
+            }),
+            insert: vi.fn(async (row: { user_id: string | null; route: string; model: string }) => {
+              usageEvents.push({
+                user_id: row.user_id,
+                route: row.route,
+                model: row.model,
+              });
+              return { error: null };
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    } as unknown as SupabaseClient;
+  }
 
   function createMockSupabaseClient() {
     return {
@@ -268,6 +332,8 @@ describe('POST /api/pdf/export Route Handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentUser = { id: 'user-uuid-1', email: 'test@example.com' };
+    activePassUsers = new Set();
+    usageEvents = [];
     db = [
       {
         id: '11111111-1111-4111-a111-111111111111',
@@ -285,12 +351,14 @@ describe('POST /api/pdf/export Route Handler', () => {
       },
     ];
 
+    setServiceRoleClientForTesting(createMockAdminClient());
     vi.spyOn(supabaseServer, 'createClient').mockImplementation(async () =>
       createMockSupabaseClient() as unknown as ReturnType<typeof supabaseServer.createClient>
     );
   });
 
   afterEach(() => {
+    setServiceRoleClientForTesting(null);
     vi.restoreAllMocks();
   });
 
@@ -375,6 +443,74 @@ describe('POST /api/pdf/export Route Handler', () => {
     const headerBytes = new Uint8Array(arrayBuffer.slice(0, 5));
     const headerString = String.fromCharCode(...headerBytes);
     expect(headerString).toBe('%PDF-');
+  });
+
+  it('allows free user 1st clean export (200) and records 1 /api/pdf/export usage_events row', async () => {
+    const req = new Request('http://localhost:3000/api/pdf/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeId: '11111111-1111-4111-a111-111111111111' }),
+    });
+
+    const res = await exportPdfRoute(req);
+    expect(res.status).toBe(200);
+    expect(usageEvents).toHaveLength(1);
+    expect(usageEvents[0]).toEqual({
+      user_id: 'user-uuid-1',
+      route: '/api/pdf/export',
+      model: 'standard',
+    });
+  });
+
+  it('blocks free user 2nd export with HTTP 402 EXPORT_LIMIT_REACHED', async () => {
+    usageEvents.push({
+      user_id: 'user-uuid-1',
+      route: '/api/pdf/export',
+      model: 'standard',
+    });
+
+    const req = new Request('http://localhost:3000/api/pdf/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeId: '11111111-1111-4111-a111-111111111111' }),
+    });
+
+    const res = await exportPdfRoute(req);
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.code).toBe('EXPORT_LIMIT_REACHED');
+    expect(usageEvents).toHaveLength(1);
+  });
+
+  it('allows active 30-day pass holder to export with >= 1 prior exports (200)', async () => {
+    activePassUsers.add('user-uuid-1');
+    usageEvents.push({
+      user_id: 'user-uuid-1',
+      route: '/api/pdf/export',
+      model: 'standard',
+    });
+
+    const req = new Request('http://localhost:3000/api/pdf/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeId: '11111111-1111-4111-a111-111111111111' }),
+    });
+
+    const res = await exportPdfRoute(req);
+    expect(res.status).toBe(200);
+    expect(usageEvents).toHaveLength(2);
+  });
+
+  it('does not charge usage_events when free user export fails ATS lint (422)', async () => {
+    const req = new Request('http://localhost:3000/api/pdf/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeId: '22222222-2222-4222-a222-222222222222' }),
+    });
+
+    const res = await exportPdfRoute(req);
+    expect(res.status).toBe(422);
+    expect(usageEvents).toHaveLength(0);
   });
 });
 

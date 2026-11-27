@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { renderToBuffer, Document } from '@react-pdf/renderer';
 import { PDFParse } from 'pdf-parse';
 import { createClient } from '@/lib/db/supabase-server';
+import { getServiceRoleClient, hasActivePass } from '@/lib/billing/entitlements';
+import { recordUsageEvent } from '@/lib/db/usage-events';
 import { registerFonts } from '@/lib/pdf/fonts';
 import { ResumeDocument } from '@/lib/pdf/templates/standard';
 import { ClassicResumeDocument } from '@/lib/pdf/templates/classic';
@@ -61,7 +63,38 @@ export async function POST(request: Request) {
   const resumeData = resumeRecord.content as Resume;
   const chosenTemplate = payloadTemplate || resumeRecord.template || 'standard';
 
-  // 1. Render PDF buffer server-side
+  // 1. Entitlement & free-tier export quota gate
+  const admin = getServiceRoleClient();
+  const passActive = await hasActivePass(user.id, admin);
+
+  if (!passActive) {
+    const { count, error: quotaError } = await admin
+      .from('usage_events')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('route', '/api/pdf/export');
+
+    if (quotaError) {
+      return NextResponse.json(
+        { error: 'Export quota check unavailable. Try again shortly.' },
+        { status: 503 }
+      );
+    }
+
+    if ((count ?? 0) >= 1) {
+      return NextResponse.json(
+        {
+          error: 'Free export limit reached. Upgrade to the 30-day pass for unlimited exports.',
+          code: 'EXPORT_LIMIT_REACHED',
+        },
+        { status: 402 }
+      );
+    }
+  }
+
+  const startMs = Date.now();
+
+  // 2. Render PDF buffer server-side
   registerFonts();
   const DocumentComponent =
     chosenTemplate === 'classic' ? ClassicResumeDocument : ResumeDocument;
@@ -71,7 +104,7 @@ export async function POST(request: Request) {
 
   const pdfBuffer = await renderToBuffer(documentElement);
 
-  // 2. Extract text with pdf-parse v2 class API
+  // 3. Extract text with pdf-parse v2 class API
   const parser = new PDFParse({ data: pdfBuffer });
   let extractedText = '';
   try {
@@ -81,7 +114,7 @@ export async function POST(request: Request) {
     await parser.destroy();
   }
 
-  // 3. Pre-flight ATS linting
+  // 4. Pre-flight ATS linting (never charge an export if lint fails)
   const lintResult = lintExtractedText(extractedText, resumeData);
 
   if (!lintResult.passed || lintResult.errors.length > 0) {
@@ -94,7 +127,19 @@ export async function POST(request: Request) {
     );
   }
 
-  // 4. Return PDF stream with download attachment headers
+  // 5. Record clean export telemetry before returning PDF stream
+  await recordUsageEvent(
+    {
+      userId: user.id,
+      route: '/api/pdf/export',
+      provider: 'internal',
+      model: chosenTemplate,
+      latencyMs: Date.now() - startMs,
+    },
+    { adminClient: admin }
+  );
+
+  // 6. Return PDF stream with download attachment headers
   const rawName = (resumeData.basics?.fullName || 'Candidate').trim();
   const sanitizedName =
     rawName

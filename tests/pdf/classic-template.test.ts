@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import React from 'react';
 import { renderToBuffer, Document } from '@react-pdf/renderer';
 import { renderToString } from 'react-dom/server';
@@ -7,6 +8,7 @@ import { registerFonts, registerSerifFonts, getSerifFontSources } from '@/lib/pd
 import { ClassicResumeDocument } from '@/lib/pdf/templates/classic';
 import { LivePdfPreview } from '@/components/editor/LivePdfPreview';
 import { POST as exportPdfRoute } from '@/app/api/pdf/export/route';
+import { setServiceRoleClientForTesting } from '@/lib/billing/entitlements';
 import * as supabaseServer from '@/lib/db/supabase-server';
 import type { Resume } from '@/types/resume';
 
@@ -327,6 +329,32 @@ describe('T-011: Template Dispatching in Preview and Export Pipeline', () => {
       }),
     };
 
+    const mockAdminClient = {
+      from: vi.fn((table: string) => {
+        if (table === 'entitlements') {
+          const builder = {
+            select: vi.fn(() => builder),
+            eq: vi.fn(() => builder),
+            gt: vi.fn(() => builder),
+            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+          };
+          return builder;
+        }
+        if (table === 'usage_events') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
+              })),
+            })),
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    } as unknown as SupabaseClient;
+
+    setServiceRoleClientForTesting(mockAdminClient);
     vi.spyOn(supabaseServer, 'createClient').mockResolvedValue(
       mockSupabase as unknown as Awaited<ReturnType<typeof supabaseServer.createClient>>
     );
@@ -340,19 +368,23 @@ describe('T-011: Template Dispatching in Preview and Export Pipeline', () => {
       }),
     });
 
-    const response = await exportPdfRoute(request);
-    expect(response.status).toBe(200);
-    expect(response.headers.get('Content-Type')).toBe('application/pdf');
-
-    const pdfArrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(pdfArrayBuffer);
-    const parser = new PDFParse({ data: buffer });
     try {
-      const parsed = await parser.getText();
-      expect(parsed.text).toContain(spikeBasic.basics.fullName);
-      expect(parsed.text).not.toContain('\uFFFD');
+      const response = await exportPdfRoute(request);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('application/pdf');
+
+      const pdfArrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(pdfArrayBuffer);
+      const parser = new PDFParse({ data: buffer });
+      try {
+        const parsed = await parser.getText();
+        expect(parsed.text).toContain(spikeBasic.basics.fullName);
+        expect(parsed.text).not.toContain('\uFFFD');
+      } finally {
+        await parser.destroy();
+      }
     } finally {
-      await parser.destroy();
+      setServiceRoleClientForTesting(null);
     }
   });
 });
