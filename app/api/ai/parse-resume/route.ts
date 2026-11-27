@@ -1,7 +1,20 @@
+import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import 'pdf-parse/worker';
 import { PDFParse } from 'pdf-parse';
 import { createClient } from '@/lib/db/supabase-server';
+import { getServiceRoleClient, hasActivePass } from '@/lib/billing/entitlements';
+import {
+  isOwnedPdfStoragePath,
+  verifyUploadedResume,
+  purgeUploadedResume,
+  ResumeUploadError,
+} from '@/lib/storage/resume-upload';
+import { parseResume } from '@/lib/ai/parsers/resume-parser';
+import { recordUsageEvent } from '@/lib/db/usage-events';
+import { type LlmProvider } from '@/lib/ai/provider';
+import { GeminiProvider } from '@/lib/ai/providers/gemini';
 import { ResumeParserOutputSchema, type ResumeParserOutput } from '@/lib/ai/schemas';
 
 
@@ -468,6 +481,147 @@ export function parseResumeLocally(text: string): ResumeParserOutput {
   return ResumeParserOutputSchema.parse(result);
 }
 
+let providerOverride: LlmProvider | null = null;
+export function setProviderForTesting(provider: LlmProvider | null): void {
+  providerOverride = provider;
+}
+
+export function resolveDefaultProvider(): LlmProvider {
+  if (providerOverride) {
+    return providerOverride;
+  }
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('AI provider is not configured');
+  }
+  return new GeminiProvider({ apiKey });
+}
+
+/**
+ * Background worker task executing the format-agnostic Stage 1 parsing pipeline.
+ * Guarantees raw storage purge in a finally block.
+ */
+export async function processParseJob(
+  jobId: string,
+  userId: string,
+  storagePath: string,
+  options?: {
+    adminClient?: SupabaseClient;
+    provider?: LlmProvider;
+    preVerifiedBytes?: Uint8Array;
+  },
+): Promise<void> {
+  const admin = options?.adminClient ?? getServiceRoleClient();
+
+  try {
+    const { error: startError } = await admin
+      .from('parse_jobs')
+      .update({ status: 'processing', updated_at: new Date().toISOString() })
+      .eq('id', jobId);
+
+    if (startError) {
+      throw new Error(`Failed to update job status to processing: ${startError.message}`);
+    }
+
+    const pdfBytes =
+      options?.preVerifiedBytes ??
+      (await verifyUploadedResume(storagePath, userId, { adminClient: admin })).bytes;
+    const parser = new PDFParse({ data: pdfBytes });
+    let extractedText = '';
+    try {
+      const textResult = await parser.getText();
+      extractedText = textResult.text ?? '';
+    } finally {
+      await parser.destroy();
+    }
+
+    // AC 5: Scan Fallback (< 200 characters)
+    if (extractedText.trim().length < 200) {
+      const { error: scanError } = await admin
+        .from('parse_jobs')
+        .update({
+          status: 'failed',
+          error: JSON.stringify({
+            isScan: true,
+            error:
+              'Extracted text is too short. Your file may be a scanned image or photo. Please enter your resume details manually or copy-paste text.',
+          }),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', jobId);
+
+      if (scanError) {
+        console.error('Failed to record failed scan status in database:', scanError.message);
+      }
+      return;
+    }
+
+    // AC 2 & T-024: Parse text with Stage 1 LLM parser adapter
+    const provider = options?.provider ?? resolveDefaultProvider();
+    const parseResult = await parseResume(extractedText, provider);
+
+    // AC 3: Mark completed with ResumeImportDraft result
+    const { error: completeError } = await admin
+      .from('parse_jobs')
+      .update({
+        status: 'completed',
+        result: parseResult.draft,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', jobId);
+
+    if (completeError) {
+      throw new Error(`Failed to record completed job result in database: ${completeError.message}`);
+    }
+
+    // AC 8: Record telemetry event
+    await recordUsageEvent(
+      {
+        userId,
+        route: '/api/ai/parse-resume',
+        provider: provider.name,
+        model: parseResult.model,
+        latencyMs: parseResult.latencyMs,
+        inputTokens: null,
+        outputTokens: null,
+        estCostUsd: null,
+      },
+      { adminClient: admin },
+    );
+  } catch {
+    // AC 6: Terminal failure handling without synthetic placeholders
+    const { error: failError } = await admin
+      .from('parse_jobs')
+      .update({
+        status: 'failed',
+        error: JSON.stringify({
+          parse_failed: true,
+          is_scan: false,
+          manual_fallback: true,
+        }),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', jobId);
+
+    if (failError) {
+      console.error('Failed to update parse_job to terminal failed state in database:', failError.message);
+    }
+  } finally {
+    // AC 4: Guaranteed storage purge in finally block
+    try {
+      await purgeUploadedResume(storagePath, { adminClient: admin });
+    } catch (purgeErr) {
+      console.error(
+        'CRITICAL: Failed to purge uploaded resume in finally block; raw file retained in storage:',
+        {
+          storagePath,
+          error: purgeErr instanceof Error ? purgeErr.message : String(purgeErr),
+        },
+      );
+    }
+  }
+}
+
 export async function POST(request: Request) {
   // 1. Authenticate user session
   const supabase = await createClient();
@@ -480,10 +634,182 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 2. Validate payload and enforce 5 MB limit
   const contentType = request.headers.get('content-type') || '';
-  let extractedText = '';
 
+  if (contentType.includes('application/json')) {
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
+    }
+
+    // AC 1: Strictly reject DOCX format
+    if (
+      (typeof body.storagePath === 'string' && body.storagePath.toLowerCase().endsWith('.docx')) ||
+      (typeof body.fileType === 'string' && body.fileType.toLowerCase() === 'docx') ||
+      (typeof body.filename === 'string' && body.filename.toLowerCase().endsWith('.docx'))
+    ) {
+      return NextResponse.json(
+        { error: 'DOCX format is not supported for MVP; please upload a PDF' },
+        { status: 400 },
+      );
+    }
+
+    // AC 2: Primary asynchronous 202 job creation pipeline
+    if (typeof body.storagePath === 'string') {
+      const storagePath = body.storagePath;
+
+      if (!isOwnedPdfStoragePath(storagePath, user.id)) {
+        return NextResponse.json(
+          { error: 'Access to this upload path is forbidden.' },
+          { status: 403 },
+        );
+      }
+
+      const admin = getServiceRoleClient();
+
+      // AC 7a: Per-user rate limit via parse_jobs count (max 5 requests / 60s)
+      const sixtySecondsAgoIso = new Date(Date.now() - 60_000).toISOString();
+      const { count: recentJobCount, error: rateLimitError } = await admin
+        .from('parse_jobs')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', sixtySecondsAgoIso);
+
+      if (rateLimitError) {
+        return NextResponse.json(
+          { error: 'Rate limit service unavailable. Try again shortly.' },
+          { status: 503, headers: { 'Retry-After': '5' } },
+        );
+      }
+
+      if ((recentJobCount ?? 0) >= 5) {
+        return NextResponse.json(
+          { error: 'Rate limit exceeded. Try again shortly.' },
+          { status: 429, headers: { 'Retry-After': '60' } },
+        );
+      }
+
+      // AC 7b: Per-user AI quota via entitlements + usage_events (5/24h free, 300/30d pass)
+      const isPassActive = await hasActivePass(user.id, admin);
+      const quotaLimit = isPassActive ? 300 : 5;
+      const quotaWindowMs = isPassActive
+        ? 30 * 24 * 60 * 60 * 1000
+        : 24 * 60 * 60 * 1000;
+      const quotaSinceIso = new Date(Date.now() - quotaWindowMs).toISOString();
+
+      const { count: usageCount, error: quotaError } = await admin
+        .from('usage_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', quotaSinceIso);
+
+      if (quotaError) {
+        return NextResponse.json(
+          { error: 'Quota service unavailable. Try again shortly.' },
+          { status: 503, headers: { 'Retry-After': '5' } },
+        );
+      }
+
+      if ((usageCount ?? 0) >= quotaLimit) {
+        return NextResponse.json(
+          { error: 'AI quota limit reached.' },
+          { status: 429 },
+        );
+      }
+
+      let preVerifiedBytes: Uint8Array;
+      try {
+        const verified = await verifyUploadedResume(storagePath, user.id, {
+          adminClient: admin,
+        });
+        preVerifiedBytes = verified.bytes;
+      } catch (err: unknown) {
+        if (err instanceof ResumeUploadError) {
+          return NextResponse.json(
+            { error: err.message, code: err.code },
+            { status: err.statusCode },
+          );
+        }
+        return NextResponse.json(
+          { error: 'Failed to verify uploaded resume.' },
+          { status: 500 },
+        );
+      }
+
+      const jobId = crypto.randomUUID();
+      const { error: insertError } = await admin.from('parse_jobs').insert({
+        id: jobId,
+        user_id: user.id,
+        storage_path: storagePath,
+        status: 'pending',
+      });
+
+      if (insertError) {
+        await purgeUploadedResume(storagePath, { adminClient: admin }).catch(() => { });
+        return NextResponse.json(
+          { error: 'Failed to queue parse job.' },
+          { status: 500 },
+        );
+      }
+
+      const jobPromise = processParseJob(jobId, user.id, storagePath, {
+        preVerifiedBytes,
+      });
+      jobPromise.catch((err) => {
+        console.error(`Background job ${jobId} failed:`, err);
+      });
+
+      if (process.env.NODE_ENV !== 'production' && body.sync === true) {
+        await jobPromise;
+      }
+
+      return NextResponse.json(
+        {
+          jobId,
+          status: 'pending',
+          pollUrl: `/api/ai/parse-resume/status/${jobId}`,
+        },
+        { status: 202 },
+      );
+    }
+
+    // Legacy synchronous text payload fallback
+    if (typeof body.text === 'string') {
+      if (Buffer.byteLength(body.text, 'utf8') > MAX_FILE_SIZE) {
+        return NextResponse.json({ error: 'Payload exceeds 5 MB limit' }, { status: 413 });
+      }
+
+      if (body.text.trim().length < 200) {
+        return NextResponse.json(
+          {
+            isScan: true,
+            error:
+              'Extracted text is too short. Your file may be a scanned image or photo. Please enter your resume details manually or copy-paste text.',
+          },
+          { status: 422 },
+        );
+      }
+
+      try {
+        const parsedOutput = parseResumeLocally(body.text);
+        return NextResponse.json(parsedOutput, {
+          status: 200,
+          headers: { 'Cache-Control': 'no-store' },
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to parse resume';
+        return NextResponse.json({ error: 'Parsing failed', details: [message] }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid JSON payload. Expected { storagePath: string }' },
+      { status: 400 },
+    );
+  }
+
+  // Legacy multipart/form-data & raw binary fallback
+  let extractedText = '';
   try {
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
@@ -493,6 +819,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No file provided' }, { status: 400 });
       }
 
+      if (file.name && file.name.toLowerCase().endsWith('.docx')) {
+        return NextResponse.json(
+          { error: 'DOCX format is not supported for MVP; please upload a PDF' },
+          { status: 400 },
+        );
+      }
+
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json({ error: 'File size exceeds 5 MB limit' }, { status: 413 });
       }
@@ -500,27 +833,14 @@ export async function POST(request: Request) {
       const arrayBuffer = await file.arrayBuffer();
       const pdfBuffer = Buffer.from(arrayBuffer);
 
-      // Extract text with pdf-parse v2 class API
       const parser = new PDFParse({ data: pdfBuffer });
       try {
         const textResult = await parser.getText();
-        extractedText = textResult.text;
+        extractedText = textResult.text ?? '';
       } finally {
         await parser.destroy();
       }
-    } else if (contentType.includes('application/json')) {
-      const body = await request.json().catch(() => null);
-      if (!body || typeof body.text !== 'string') {
-        return NextResponse.json({ error: 'Invalid JSON payload. Expected { text: string }' }, { status: 400 });
-      }
-
-      if (Buffer.byteLength(body.text, 'utf8') > MAX_FILE_SIZE) {
-        return NextResponse.json({ error: 'Payload exceeds 5 MB limit' }, { status: 413 });
-      }
-
-      extractedText = body.text;
     } else {
-      // Check if raw binary PDF was provided directly
       const rawBuffer = Buffer.from(await request.arrayBuffer());
       if (rawBuffer.byteLength > MAX_FILE_SIZE) {
         return NextResponse.json({ error: 'File size exceeds 5 MB limit' }, { status: 413 });
@@ -530,14 +850,14 @@ export async function POST(request: Request) {
         const parser = new PDFParse({ data: rawBuffer });
         try {
           const textResult = await parser.getText();
-          extractedText = textResult.text;
+          extractedText = textResult.text ?? '';
         } finally {
           await parser.destroy();
         }
       } else {
         return NextResponse.json(
-          { error: 'Unsupported Content-Type. Expected multipart/form-data or application/json' },
-          { status: 400 }
+          { error: 'Unsupported Content-Type. Expected application/json with storagePath' },
+          { status: 400 },
         );
       }
     }
@@ -546,7 +866,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  // 3. Scan Fallback: Reject text shorter than 200 characters with 422
   if (extractedText.trim().length < 200) {
     return NextResponse.json(
       {
@@ -554,20 +873,15 @@ export async function POST(request: Request) {
         error:
           'Extracted text is too short. Your file may be a scanned image or photo. Please enter your resume details manually or copy-paste text.',
       },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
-  // 4. Parse extracted text deterministically or with configured model (temperature 0)
-  // Zero candidate resume text logging
   try {
     const parsedOutput = parseResumeLocally(extractedText);
-
     return NextResponse.json(parsedOutput, {
       status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-      },
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to parse resume';
