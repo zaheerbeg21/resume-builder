@@ -1,124 +1,86 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/db/supabase-server';
+import { getServiceRoleClient, hasActivePass } from '@/lib/billing/entitlements';
+import { recordUsageEvent } from '@/lib/db/usage-events';
+import {
+  ProviderError,
+  type GenerateResult,
+  type LlmProvider,
+} from '@/lib/ai/provider';
+import { GeminiProvider } from '@/lib/ai/providers/gemini';
+import {
+  BULLET_OPTIMIZE_PROMPT_VERSION,
+  BULLET_OPTIMIZE_SYSTEM_PROMPT,
+  buildBulletPrompt,
+} from '@/lib/ai/prompts/bullet-optimize';
 import {
   BulletOptimizeInputSchema,
   BulletResultSchema,
   type BulletResult,
-  type BulletVariant,
-  type PlaceholderItem,
 } from '@/lib/ai/schemas';
 import { verifyZeroInventedDigits, verifyWordCount } from '@/lib/ai/guards';
 
-export const PROMPT_VERSION = 'v1';
+export const PROMPT_VERSION = BULLET_OPTIMIZE_PROMPT_VERSION;
 
-/**
- * Clean and normalize text fragments for safe injection into generated achievement sentences.
- */
-function cleanCoreText(raw: string): string {
-  return raw
-    .replace(/^[\s•\-*·]+/, '')
-    .replace(/[.;,]+$/, '')
-    .trim();
+const SERVICE_UNAVAILABLE_MSG =
+  'AI bullet optimization service is temporarily unavailable.';
+const GUARD_FAILURE_MSG =
+  'Could not generate a truth-verified rewrite. Please add concrete details or edit manually.';
+
+let providerOverride: LlmProvider | null = null;
+
+export function setProviderForTesting(provider: LlmProvider | null): void {
+  providerOverride = provider;
 }
 
-/**
- * Deterministic, truth-bound bullet generator.
- * Used for testing and whenever external AI API keys are unset.
- *
- * Enforces Google XYZ formula: "Accomplished [X], measured by [Y], by doing [Z]"
- * Guarantees zero invented numbers by using only source digits or bracketed placeholders.
- */
-export function generateDeterministicBulletResult(params: {
-  rawBullet: string;
-  roleTitle?: string;
-  targetKeywords?: string[];
-  userFacts?: string;
-  isCurrentRole?: boolean;
-}): BulletResult {
-  const { rawBullet, roleTitle = '', targetKeywords = [], userFacts = '', isCurrentRole = false } = params;
-
-  const combinedSource = `${rawBullet} ${userFacts}`.trim();
-  const cleanedOriginal = cleanCoreText(rawBullet);
-
-  // Extract legitimate numbers from input
-  const sourceNumberMatches = combinedSource.match(/\d+(?:[.,]\d+)?%?/g);
-  const foundMetric = sourceNumberMatches && sourceNumberMatches.length > 0 ? sourceNumberMatches[0] : null;
-
-  const placeholders: PlaceholderItem[] = [];
-  const metricPlaceholder = foundMetric ? foundMetric : '[X%]';
-
-  if (!foundMetric) {
-    placeholders.push({
-      token: '[X%]',
-      question: 'What percentage improvement, speedup, or efficiency gain was achieved?',
-    });
+export function resolveDefaultProvider(): LlmProvider {
+  if (providerOverride) {
+    return providerOverride;
   }
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('Missing required environment variable: GEMINI_API_KEY');
+  }
+  return new GeminiProvider({ apiKey });
+}
 
-  // Determine whether input reflects leadership or individual scope
-  const leadershipPattern = /\b(lead|leader|leadership|manager|manage|managed|mentored|team|hire|hired|cross-functional)\b/i;
-  const isLeadership = leadershipPattern.test(`${rawBullet} ${roleTitle} ${userFacts}`);
+function evaluateVariantGuards(
+  result: BulletResult,
+  rawBullet: string,
+  userFacts?: string,
+): string | null {
+  const issues: string[] = [];
 
-  // Determine verbs based on role tense
-  const v1Action = isCurrentRole ? 'Engineer' : 'Engineered';
-  const v2Action = isCurrentRole ? 'Accelerate' : 'Accelerated';
-  const v3Action = isLeadership
-    ? isCurrentRole
-      ? 'Spearhead'
-      : 'Spearheaded'
-    : isCurrentRole
-      ? 'Architect'
-      : 'Architected';
-
-  // Identify applicable target keywords to incorporate and report
-  const matchedKeywords = targetKeywords.filter((kw) =>
-    new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(combinedSource)
-  );
-  const keywordPhrase = matchedKeywords.length > 0 ? ` leveraging ${matchedKeywords.slice(0, 2).join(' and ')}` : '';
-
-  // Variant 1: Conservative (closest to original bullet)
-  const variant1Text = `${v1Action} robust enhancements for ${cleanedOriginal}${keywordPhrase}, measured by ${metricPlaceholder} performance improvement, by optimizing workflows.`;
-
-  // Variant 2: Metric-focused (emphasizes measurable impact)
-  const variant2Text = `${v2Action} operational velocity across critical systems${keywordPhrase}, measured by achieving ${metricPlaceholder} improvement in turnaround time, by automating execution paths.`;
-
-  // Variant 3: Leadership-focused or Scope-focused
-  const variant3Style = isLeadership ? ('leadership_focused' as const) : ('scope_focused' as const);
-  const variant3Text = isLeadership
-    ? `${v3Action} cross-functional initiatives for ${cleanedOriginal}${keywordPhrase}, measured by ${metricPlaceholder} delivery efficiency, through structured mentorship and agile alignment.`
-    : `${v3Action} resilient technical infrastructure for ${cleanedOriginal}${keywordPhrase}, measured by ${metricPlaceholder} operational stability, by standardizing architectural interfaces.`;
-
-  const candidateVariants: BulletVariant[] = [
-    {
-      style: 'conservative',
-      text: variant1Text,
-      keywords_used: matchedKeywords,
-    },
-    {
-      style: 'metric_focused',
-      text: variant2Text,
-      keywords_used: matchedKeywords,
-    },
-    {
-      style: variant3Style,
-      text: variant3Text,
-      keywords_used: matchedKeywords,
-    },
-  ];
-
-  // Enforce server-side guards on all generated variants
-  for (const variant of candidateVariants) {
+  for (const variant of result.variants) {
     if (!verifyZeroInventedDigits(rawBullet, variant.text, userFacts)) {
-      throw new Error(`Server guard failed: invented digits detected in variant (${variant.style})`);
+      issues.push(
+        `Variant '${variant.style}' included digits not present in bullet_text or user_facts; replace missing figures with bracketed placeholders like [X%] and list them in placeholders_needed.`,
+      );
     }
     if (!verifyWordCount(variant.text, 12, 32)) {
-      throw new Error(`Server guard failed: word count violation in variant (${variant.style})`);
+      issues.push(
+        `Variant '${variant.style}' must be between 12 and 32 words (aim for 15 to 28 words).`,
+      );
     }
   }
 
-  return BulletResultSchema.parse({
-    variants: candidateVariants,
-    placeholders_needed: placeholders,
-  });
+  return issues.length > 0 ? issues.join(' ') : null;
+}
+
+function mapProviderErrorResponse(err: unknown): NextResponse {
+  if (err instanceof ProviderError) {
+    if (err.kind === 'timeout') {
+      return NextResponse.json(
+        { error: 'AI bullet optimization request timed out. Please try again.' },
+        { status: 504 },
+      );
+    }
+    return NextResponse.json(
+      { error: 'AI bullet optimization failed. Please try again shortly.' },
+      { status: 502 },
+    );
+  }
+  return NextResponse.json({ error: SERVICE_UNAVAILABLE_MSG }, { status: 502 });
 }
 
 export async function POST(request: Request) {
@@ -148,33 +110,148 @@ export async function POST(request: Request) {
         error: 'Validation failed',
         details: parseResult.error.issues.map((i) => i.message),
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  const { rawBullet, roleTitle, targetKeywords, userFacts, isCurrentRole } = parseResult.data;
-
-  // 3. Generate bullet improvements using deterministic fallback or configured provider
+  // 3. Resolve LLM provider (fail closed with 503 if unconfigured)
+  let provider: LlmProvider;
   try {
-    const result = generateDeterministicBulletResult({
-      rawBullet,
-      roleTitle,
-      targetKeywords,
-      userFacts,
-      isCurrentRole,
-    });
+    provider = resolveDefaultProvider();
+  } catch {
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MSG }, { status: 503 });
+  }
 
-    return NextResponse.json(result, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-      },
+  // 4. Enforce per-user rate limit and AI quota (fail closed on DB errors)
+  let admin: ReturnType<typeof getServiceRoleClient>;
+  try {
+    admin = getServiceRoleClient();
+  } catch {
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MSG }, { status: 503 });
+  }
+
+  const sixtySecondsAgoIso = new Date(Date.now() - 60_000).toISOString();
+  const { count: recentCount, error: rateLimitError } = await admin
+    .from('usage_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', sixtySecondsAgoIso);
+
+  if (rateLimitError) {
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MSG }, { status: 503 });
+  }
+
+  if ((recentCount ?? 0) >= 10) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Try again shortly.' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
+
+  let isPassActive = false;
+  try {
+    isPassActive = await hasActivePass(user.id, admin);
+  } catch {
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MSG }, { status: 503 });
+  }
+
+  const quotaLimit = isPassActive ? 300 : 5;
+  const quotaWindowMs = isPassActive
+    ? 30 * 24 * 60 * 60 * 1000
+    : 24 * 60 * 60 * 1000;
+  const quotaSinceIso = new Date(Date.now() - quotaWindowMs).toISOString();
+
+  const { count: quotaCount, error: quotaError } = await admin
+    .from('usage_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', quotaSinceIso);
+
+  if (quotaError) {
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MSG }, { status: 503 });
+  }
+
+  if ((quotaCount ?? 0) >= quotaLimit) {
+    return NextResponse.json(
+      { error: 'AI quota limit reached.' },
+      { status: 429 },
+    );
+  }
+
+  // 5. Generate bullet variants via LlmProvider with single guard-failure retry (never log bullet text)
+  const input = parseResult.data;
+  let generation: GenerateResult<BulletResult>;
+  try {
+    generation = await provider.generateStructured({
+      systemPrompt: BULLET_OPTIMIZE_SYSTEM_PROMPT,
+      prompt: buildBulletPrompt(input),
+      schema: BulletResultSchema,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to optimize bullet';
-    return NextResponse.json(
-      { error: 'Generation failed', details: [message] },
-      { status: 500 }
+    return mapProviderErrorResponse(err);
+  }
+
+  let totalLatencyMs = generation.latencyMs ?? 0;
+  let inputTokens: number | null = generation.inputTokens ?? null;
+  let outputTokens: number | null = generation.outputTokens ?? null;
+
+  let guardFeedback = evaluateVariantGuards(
+    generation.data,
+    input.rawBullet,
+    input.userFacts,
+  );
+
+  if (guardFeedback !== null) {
+    let retryGeneration: GenerateResult<BulletResult>;
+    try {
+      retryGeneration = await provider.generateStructured({
+        systemPrompt: BULLET_OPTIMIZE_SYSTEM_PROMPT,
+        prompt: buildBulletPrompt(input, guardFeedback),
+        schema: BulletResultSchema,
+      });
+    } catch (err: unknown) {
+      return mapProviderErrorResponse(err);
+    }
+
+    totalLatencyMs += retryGeneration.latencyMs ?? 0;
+    if (retryGeneration.inputTokens != null) {
+      inputTokens = (inputTokens ?? 0) + retryGeneration.inputTokens;
+    }
+    if (retryGeneration.outputTokens != null) {
+      outputTokens = (outputTokens ?? 0) + retryGeneration.outputTokens;
+    }
+
+    generation = retryGeneration;
+    guardFeedback = evaluateVariantGuards(
+      generation.data,
+      input.rawBullet,
+      input.userFacts,
     );
   }
+
+  // 6. Record exactly 1 telemetry row per user request
+  await recordUsageEvent(
+    {
+      userId: user.id,
+      route: '/api/ai/bullet-optimize',
+      provider: generation.provider,
+      model: generation.model,
+      latencyMs: totalLatencyMs,
+      inputTokens,
+      outputTokens,
+      estCostUsd: null,
+    },
+    { adminClient: admin },
+  );
+
+  if (guardFeedback !== null) {
+    return NextResponse.json({ error: GUARD_FAILURE_MSG }, { status: 422 });
+  }
+
+  return NextResponse.json(generation.data, {
+    status: 200,
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  });
 }
