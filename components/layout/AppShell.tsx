@@ -32,6 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const isWorkspaceRoute = Boolean(activeResumeId);
 
     // Auto-collapse sidebar inside editor/target like Rezi, expand on dashboard/billing
+    const [prevPathname, setPrevPathname] = useState(pathname);
     const [isCollapsed, setIsCollapsed] = useState(isWorkspaceRoute);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -41,13 +42,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Sync collapse state when switching between dashboard and resume editor
-    useEffect(() => {
+    // Sync collapse and overlay state when switching routes without a cascading effect
+    if (prevPathname !== pathname) {
+        setPrevPathname(pathname);
         setIsCollapsed(isWorkspaceRoute);
         setMobileNavOpen(false);
         setUserMenuOpen(false);
         setAtsGuideOpen(false);
-    }, [pathname, isWorkspaceRoute]);
+    }
 
     // Close ATS guide modal on Escape
     useEffect(() => {
@@ -93,7 +95,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         try {
             await fetch('/api/auth/session', { method: 'POST' });
         } finally {
-            window.location.href = '/login';
+            router.replace('/login');
+            router.refresh();
         }
     };
 
