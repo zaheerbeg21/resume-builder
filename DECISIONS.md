@@ -47,3 +47,4 @@
 2026-11-27: T-034 enforced 1-free-export / active-pass entitlement gate on /api/pdf/export (recording usage_events only after ATS lint passes), propagated payment_intent_data[metadata][userId] in Stripe Checkout for refund/dispute revocation, and added production fail-fast for missing SUPABASE_SERVICE_ROLE_KEY.
 2026-11-27: T-035 added single-column Projects section to lib/pdf/templates/standard.tsx between Experience and Education for parity with classic.tsx and ATS lint order.
 2026-11-27: T-036 replaced local regex JD extraction in /api/jd/analyze with LlmProvider (GeminiProvider + BLUEPRINT §6.2 prompt), provider/model-scoped SHA-256 cache key, cache-miss quotas/rate limits, and usage_events telemetry.
+2026-11-27: T-037 replaced local bullet template generator in /api/ai/bullet-optimize with LlmProvider (GeminiProvider + BLUEPRINT §6.3 Google XYZ prompt), 1-retry server digit/word-count guard loop, quotas/rate limits, and usage_events telemetry.
