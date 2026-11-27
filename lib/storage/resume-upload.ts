@@ -7,6 +7,7 @@ export const MAX_RESUME_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB (Blueprint §10)
 export const SIGNED_UPLOAD_EXPIRY_SECONDS = 120; // starting value, tuned on corpus
 export const UPLOAD_RATE_LIMIT_MAX_REQUESTS = 5; // starting value, tuned on corpus
 export const UPLOAD_RATE_LIMIT_WINDOW_MS = 60_000; // starting value, tuned on corpus
+export const UPLOAD_RATE_LIMIT_RPC_TIMEOUT_MS = 2_000; // starting value, tuned for Vercel-to-Supabase HTTPS round-trip
 export const EXPIRED_UPLOAD_AGE_MS = 60 * 60 * 1000; // 1 hour
 export const MAX_CLEANUP_OBJECTS_PER_RUN = 500; // B-02: bounded single-worker cleanup cap
 export const STORAGE_PAGE_SIZE = 100; // Supabase Storage list page limit
@@ -97,6 +98,7 @@ export async function checkAndConsumeUploadRateLimit(
   options?: {
     adminClient?: SupabaseClient;
     signal?: AbortSignal;
+    timeoutMs?: number;
   },
 ): Promise<UploadRateLimitResult> {
   if (!userId || userId.includes('/') || userId.includes('\\')) {
@@ -104,8 +106,9 @@ export async function checkAndConsumeUploadRateLimit(
   }
 
   const admin = options?.adminClient ?? getServiceRoleClient();
+  const timeoutMs = options?.timeoutMs ?? UPLOAD_RATE_LIMIT_RPC_TIMEOUT_MS;
   const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), 150);
+  const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
   const onCallerAbort = () => abortController.abort();
 
   if (options?.signal) {

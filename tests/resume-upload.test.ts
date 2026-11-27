@@ -14,6 +14,7 @@ import {
   SIGNED_UPLOAD_EXPIRY_SECONDS,
   STORAGE_PAGE_SIZE,
   UPLOAD_RATE_LIMIT_MAX_REQUESTS,
+  UPLOAD_RATE_LIMIT_RPC_TIMEOUT_MS,
   UPLOAD_RATE_LIMIT_WINDOW_MS,
   checkAndConsumeUploadRateLimit,
   cleanupExpiredResumeUploads,
@@ -507,8 +508,10 @@ describe('T-020: Signed-URL Private Storage Pipeline & parse_jobs Schema', () =>
     } as unknown as SupabaseClient;
 
     try {
+      expect(UPLOAD_RATE_LIMIT_RPC_TIMEOUT_MS).toBe(2000);
       const result = await checkAndConsumeUploadRateLimit('user-timeout', {
         adminClient: mockAdmin,
+        timeoutMs: 150,
       });
 
       expect(result).toEqual({
