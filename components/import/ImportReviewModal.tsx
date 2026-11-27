@@ -2,22 +2,138 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ResumeParserOutput } from '@/lib/ai/schemas';
-import type { Resume } from '@/types/resume';
+import type { ResumeImportDraft, ResumeParserOutput, ReviewFlag } from '@/lib/ai/schemas';
+import { ResumeSchema, type Resume } from '@/types/resume';
 
 export interface ImportReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
-  parsedResume: ResumeParserOutput;
+  parsedResume: ResumeImportDraft | ResumeParserOutput;
   onSaved?: (savedResume: { id: string; title: string }) => void;
+}
+
+/**
+ * Normalizes nullable draft fields to controlled string/undefined values
+ * without inventing placeholder strings.
+ */
+export function normalizeParsedResumeForReview(
+  parsed: ResumeImportDraft | ResumeParserOutput,
+): Resume {
+  return {
+    basics: {
+      fullName: parsed.basics.fullName ?? '',
+      headline: parsed.basics.headline ?? '',
+      email: parsed.basics.email ?? '',
+      phone: parsed.basics.phone ?? undefined,
+      location: parsed.basics.location ?? undefined,
+      links: (parsed.basics.links ?? []).map((link) => ({
+        label: link.label ?? '',
+        url: link.url ?? '',
+      })),
+    },
+    summary: parsed.summary ?? '',
+    experience: (parsed.experience ?? []).map((exp, idx) => ({
+      id: exp.id || `exp-${idx + 1}`,
+      company: exp.company ?? '',
+      title: exp.title ?? '',
+      location: exp.location ?? undefined,
+      start: exp.start ?? null,
+      end: exp.end ?? null,
+      current: Boolean(exp.current),
+      bullets: [...(exp.bullets ?? [])],
+    })),
+    projects: (parsed.projects ?? []).map((proj, idx) => ({
+      id: proj.id || `proj-${idx + 1}`,
+      name: proj.name ?? '',
+      url: proj.url ?? undefined,
+      bullets: [...(proj.bullets ?? [])],
+    })),
+    education: (parsed.education ?? []).map((edu, idx) => ({
+      id: edu.id || `edu-${idx + 1}`,
+      school: edu.school ?? '',
+      degree: edu.degree ?? '',
+      start: edu.start ?? null,
+      end: edu.end ?? null,
+    })),
+    skills: (parsed.skills ?? []).map((group) => ({
+      group: group.group ?? '',
+      items: [...(group.items ?? [])],
+    })),
+  };
+}
+
+export function sanitizeResumeForSave(resume: Resume): Resume {
+  return {
+    basics: {
+      fullName: resume.basics.fullName.trim(),
+      headline: resume.basics.headline.trim(),
+      email: resume.basics.email.trim(),
+      phone: resume.basics.phone?.trim() || undefined,
+      location: resume.basics.location?.trim() || undefined,
+      links: resume.basics.links
+        .map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
+        .filter((link) => link.label.length > 0 || link.url.length > 0),
+    },
+    summary: resume.summary.trim(),
+    experience: resume.experience.map((exp) => ({
+      ...exp,
+      company: exp.company.trim(),
+      title: exp.title.trim(),
+      location: exp.location?.trim() || undefined,
+      start: exp.start?.trim() || null,
+      end: exp.current ? null : exp.end?.trim() || null,
+      bullets: exp.bullets.map((b) => b.trim()).filter(Boolean),
+    })),
+    projects: resume.projects.map((proj) => ({
+      ...proj,
+      name: proj.name.trim(),
+      url: proj.url?.trim() || undefined,
+      bullets: proj.bullets.map((b) => b.trim()).filter(Boolean),
+    })),
+    education: resume.education.map((edu) => ({
+      ...edu,
+      school: edu.school.trim(),
+      degree: edu.degree.trim(),
+      start: edu.start?.trim() || null,
+      end: edu.end?.trim() || null,
+    })),
+    skills: resume.skills.map((group) => ({
+      group: group.group.trim(),
+      items: group.items.map((item) => item.trim()).filter(Boolean),
+    })),
+  };
+}
+
+function describeLengthLimitFlag(flag: ReviewFlag): string {
+  if (flag.message) return flag.message;
+  if (flag.path === 'summary') return 'Summary exceeds 600 characters. Trim it before saving.';
+  if (flag.path === 'basics.links') return 'Links exceed the maximum of 5 items.';
+  if (/\.bullets\[\d+\]$/.test(flag.path)) return 'Bullet exceeds 300 characters. Shorten it before saving.';
+  if (flag.path.startsWith('experience') && flag.path.endsWith('.bullets')) {
+    return 'Experience role exceeds 8 bullets. Remove or merge extra bullets before saving.';
+  }
+  if (flag.path.startsWith('projects') && flag.path.endsWith('.bullets')) {
+    return 'Project exceeds 5 bullets. Remove or merge extra bullets before saving.';
+  }
+  return 'Field exceeds recommended ATS length limits.';
+}
+
+function formatSchemaValidationError(
+  issues: Array<{ path: PropertyKey[]; message: string }>,
+): string {
+  const formatted = issues.slice(0, 4).map((issue) => {
+    const pathLabel = issue.path.length > 0 ? issue.path.map(String).join('.') : 'resume';
+    return `${pathLabel}: ${issue.message}`;
+  });
+  return `Please fix the following before saving: ${formatted.join(' • ')}`;
 }
 
 /**
  * ImportReviewModal provides a mandatory human-in-the-loop verification step
  * before committing parsed resume data to the database.
  *
- * Any fields identified in low_confidence_paths are prominently marked with
- * an amber "Needs confirmation" badge and editable inputs.
+ * Any fields identified in low_confidence_paths or missing required fields
+ * are prominently marked with an amber "Needs confirmation" badge and editable inputs.
  */
 export function ImportReviewModal({
   isOpen,
@@ -28,26 +144,69 @@ export function ImportReviewModal({
   const router = useRouter();
 
   const [title, setTitle] = useState(
-    parsedResume.basics.fullName
-      ? `${parsedResume.basics.fullName} Resume`
-      : 'Imported Resume'
+    parsedResume.basics.fullName?.trim()
+      ? `${parsedResume.basics.fullName.trim()} Resume`
+      : 'Imported Resume',
   );
   const [template, setTemplate] = useState<'standard' | 'classic'>('standard');
-  const [resumeData, setResumeData] = useState<Resume>(parsedResume);
+  const [resumeData, setResumeData] = useState<Resume>(() =>
+    normalizeParsedResumeForReview(parsedResume),
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const lowConfidenceSet = new Set(parsedResume.low_confidence_paths || []);
-  const isLowConfidence = (path: string) => lowConfidenceSet.has(path);
+  const missingRequiredSet = new Set<string>();
+  if (!resumeData.basics.fullName.trim()) {
+    missingRequiredSet.add('basics.fullName');
+  }
+  if (!resumeData.basics.email.trim()) {
+    missingRequiredSet.add('basics.email');
+  }
+  const isLowConfidence = (path: string) =>
+    lowConfidenceSet.has(path) || missingRequiredSet.has(path);
 
-  const handleBasicsChange = (field: keyof Resume['basics'], value: string) => {
+  const reviewFlags: ReviewFlag[] =
+    'review_flags' in parsedResume && Array.isArray(parsedResume.review_flags)
+      ? parsedResume.review_flags
+      : [];
+  const lengthLimitFlags = reviewFlags.filter((f) => f.reason === 'EXCEEDS_LENGTH_LIMIT');
+  const unslottedFlags = reviewFlags.filter((f) => f.reason === 'UNSLOTTED_CONTENT');
+
+  const handleBasicsChange = (
+    field: 'fullName' | 'headline' | 'email' | 'phone' | 'location',
+    value: string,
+  ) => {
     setResumeData((prev) => ({
       ...prev,
       basics: {
         ...prev.basics,
-        [field]: value,
+        [field]: field === 'phone' || field === 'location' ? value || undefined : value,
+      },
+    }));
+  };
+
+  const handleLinkChange = (index: number, field: 'label' | 'url', value: string) => {
+    setResumeData((prev) => {
+      const updated = [...prev.basics.links];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return {
+        ...prev,
+        basics: { ...prev.basics, links: updated },
+      };
+    });
+  };
+
+  const handleRemoveLink = (index: number) => {
+    setResumeData((prev) => ({
+      ...prev,
+      basics: {
+        ...prev.basics,
+        links: prev.basics.links.filter((_, idx) => idx !== index),
       },
     }));
   };
@@ -55,14 +214,41 @@ export function ImportReviewModal({
   const handleExperienceChange = (
     index: number,
     field: 'company' | 'title' | 'start' | 'end',
-    value: string
+    value: string,
   ) => {
     setResumeData((prev) => {
       const updated = [...prev.experience];
       if (updated[index]) {
         updated[index] = {
           ...updated[index],
-          [field]: value || null,
+          [field]: field === 'start' || field === 'end' ? value || null : value,
+        };
+      }
+      return { ...prev, experience: updated };
+    });
+  };
+
+  const handleExperienceBulletChange = (expIndex: number, bulletIndex: number, value: string) => {
+    setResumeData((prev) => {
+      const updated = [...prev.experience];
+      const exp = updated[expIndex];
+      if (exp) {
+        const bullets = [...exp.bullets];
+        bullets[bulletIndex] = value;
+        updated[expIndex] = { ...exp, bullets };
+      }
+      return { ...prev, experience: updated };
+    });
+  };
+
+  const handleRemoveExperienceBullet = (expIndex: number, bulletIndex: number) => {
+    setResumeData((prev) => {
+      const updated = [...prev.experience];
+      const exp = updated[expIndex];
+      if (exp) {
+        updated[expIndex] = {
+          ...exp,
+          bullets: exp.bullets.filter((_, idx) => idx !== bulletIndex),
         };
       }
       return { ...prev, experience: updated };
@@ -72,14 +258,14 @@ export function ImportReviewModal({
   const handleEducationChange = (
     index: number,
     field: 'school' | 'degree' | 'start' | 'end',
-    value: string
+    value: string,
   ) => {
     setResumeData((prev) => {
       const updated = [...prev.education];
       if (updated[index]) {
         updated[index] = {
           ...updated[index],
-          [field]: value || null,
+          [field]: field === 'start' || field === 'end' ? value || null : value,
         };
       }
       return { ...prev, education: updated };
@@ -105,13 +291,21 @@ export function ImportReviewModal({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError(null);
+
+    const sanitizedResume = sanitizeResumeForSave(resumeData);
+    const validation = ResumeSchema.safeParse(sanitizedResume);
+    if (!validation.success) {
+      setSaveError(formatSchemaValidationError(validation.error.issues));
+      return;
+    }
+
     setIsSaving(true);
 
     try {
       const payload = {
         title: title.trim() || 'Imported Resume',
         template,
-        content: resumeData,
+        content: validation.data,
       };
 
       const res = await fetch('/api/resumes', {
@@ -194,6 +388,31 @@ export function ImportReviewModal({
               className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300"
             >
               {saveError}
+            </div>
+          )}
+
+          {/* EXCEEDS_LENGTH_LIMIT Notice */}
+          {lengthLimitFlags.length > 0 && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="review-length-limit-notice"
+              className="p-3.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1.5"
+            >
+              <div className="font-semibold">
+                Length Limits Exceeded ({lengthLimitFlags.length})
+              </div>
+              <p className="text-[11px] opacity-90">
+                Trim the flagged sections below before saving so nothing is silently cut off:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] pl-1">
+                {lengthLimitFlags.map((flag, idx) => (
+                  <li key={`${flag.path}-${idx}`}>
+                    <span className="font-mono font-semibold">{flag.path}</span>:{' '}
+                    {describeLengthLimitFlag(flag)}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -386,6 +605,44 @@ export function ImportReviewModal({
                   />
                 </div>
               </div>
+
+              {resumeData.basics.links.length > 0 && (
+                <div className="pt-2 space-y-2" data-testid="review-links-list">
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Links ({resumeData.basics.links.length}/5)
+                  </div>
+                  <div className="space-y-2">
+                    {resumeData.basics.links.map((link, idx) => (
+                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 items-center">
+                        <input
+                          type="text"
+                          value={link.label}
+                          onChange={(e) => handleLinkChange(idx, 'label', e.target.value)}
+                          placeholder="Label (e.g., GitHub)"
+                          aria-label={`Link ${idx + 1} label`}
+                          className="px-2.5 py-1 rounded text-xs bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700"
+                        />
+                        <input
+                          type="url"
+                          value={link.url}
+                          onChange={(e) => handleLinkChange(idx, 'url', e.target.value)}
+                          placeholder="https://..."
+                          aria-label={`Link ${idx + 1} URL`}
+                          className="px-2.5 py-1 rounded text-xs bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLink(idx)}
+                          aria-label={`Remove link ${idx + 1}`}
+                          className="px-2 py-1 rounded text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Section 2: Summary */}
@@ -554,11 +811,28 @@ export function ImportReviewModal({
                         <span className="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-1">
                           Key Achievements / Bullets ({exp.bullets.length})
                         </span>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1.5">
                           {exp.bullets.map((b, bIdx) => (
-                            <li key={bIdx} className="text-xs text-zinc-800 dark:text-zinc-200 flex items-start gap-1.5">
-                              <span className="text-zinc-400 mt-0.5">•</span>
-                              <span className="flex-1">{b}</span>
+                            <li key={bIdx} className="text-xs text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                              <span className="text-zinc-400">•</span>
+                              <input
+                                type="text"
+                                value={b}
+                                onChange={(e) =>
+                                  handleExperienceBulletChange(idx, bIdx, e.target.value)
+                                }
+                                aria-label={`Experience ${idx + 1} bullet ${bIdx + 1}`}
+                                data-testid={`review-exp-${idx}-bullet-${bIdx}`}
+                                className="flex-1 px-2 py-1 rounded text-xs bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveExperienceBullet(idx, bIdx)}
+                                aria-label={`Remove experience ${idx + 1} bullet ${bIdx + 1}`}
+                                className="px-1.5 py-0.5 rounded text-[11px] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                              >
+                                Remove
+                              </button>
                             </li>
                           ))}
                         </ul>
@@ -669,6 +943,41 @@ export function ImportReviewModal({
                 </div>
               )}
             </div>
+
+            {/* Section 6: Additional Unslotted Content */}
+            {unslottedFlags.length > 0 && (
+              <div
+                data-testid="review-unslotted-content-section"
+                className="space-y-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800"
+              >
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">
+                  Additional Unslotted Content ({unslottedFlags.length})
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  These extracted details did not match a standard resume slot. Copy anything you want to keep into Summary, Experience, or Skills above before saving.
+                </p>
+                <div className="space-y-2">
+                  {unslottedFlags.map((flag, idx) => (
+                    <div
+                      key={`${flag.path}-${idx}`}
+                      data-testid={`review-unslotted-item-${idx}`}
+                      className="p-3 rounded-xl border border-amber-200 dark:border-amber-900/70 bg-amber-50/40 dark:bg-amber-950/20 text-xs text-zinc-800 dark:text-zinc-200 space-y-1"
+                    >
+                      {flag.message && (
+                        <p className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                          {flag.message}
+                        </p>
+                      )}
+                      {flag.excerpt && (
+                        <p className="whitespace-pre-wrap font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
+                          {flag.excerpt}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </form>
         </div>
 
