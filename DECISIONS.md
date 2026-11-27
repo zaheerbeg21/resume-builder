@@ -41,3 +41,4 @@
 - **Decision:** Clear password state immediately on signup, detect obfuscated duplicate/Google OAuth accounts via `data.user.identities.length === 0`, and auto-redirect to `/login`.
 2026-10-25: Resume import redesign: LLM semantic extraction with provenance guard and import-draft schema; signed-URL upload (ADR-022); resilience and eval amendments (ADR-023); tickets T-019 to T-025. Layout extractor is conditional on a plain-text baseline. T-015 not yet built; amendments are docs edits.
 2026-10-26: Legal audit work paused. WIP is on branch docs/legal-ticket-revisions and must not be merged as is (it dropped sections of the audit and T-020 cleanup criteria). Focus returns to the resume import fix.
+2026-11-27: T-020 signed-URL private upload (resumes-raw), parse_jobs table, PostgreSQL fixed-window rate limiter (5/60s, saturation 6, fail-closed 503), and bounded 500-object cleanup merged to master; live staging migration & concurrency checks pending per T-020 §10.6.
