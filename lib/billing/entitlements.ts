@@ -32,8 +32,13 @@ export function getServiceRoleClient(): SupabaseClient {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'mock-service-role-key-secret';
+  const configuredServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!configuredServiceKey && process.env.NODE_ENV === 'production') {
+    throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY');
+  }
+
+  const serviceKey = configuredServiceKey || 'mock-service-role-key-secret';
 
   return createClient(url, serviceKey, {
     auth: {

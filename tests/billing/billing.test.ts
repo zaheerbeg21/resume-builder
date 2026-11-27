@@ -12,6 +12,7 @@ import {
   type StripeSessionObject,
 } from '@/lib/billing/stripe';
 import {
+  getServiceRoleClient,
   hasActivePass,
   getUserEntitlement,
   recordStripeEvent,
@@ -445,6 +446,51 @@ describe('Stripe Billing & Entitlements Engine', () => {
       });
       expect(customSession.id).toBe('cs_custom_override');
       expect(customSession.url).toContain(USER_ID);
+    });
+
+    it('sends payment_intent_data[metadata][userId] in Stripe checkout session form body', async () => {
+      const originalFetch = globalThis.fetch;
+      const fetchSpy = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'cs_live_mock_123',
+            url: 'https://checkout.stripe.com/c/pay/cs_live_mock_123',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+      try {
+        vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_real_formatted_secret_123');
+        const session = await createCheckoutSession({
+          userId: USER_ID,
+          userEmail: 'buyer@example.com',
+        });
+
+        expect(session.id).toBe('cs_live_mock_123');
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const [, requestInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        const sentParams = new URLSearchParams(String(requestInit.body));
+        expect(sentParams.get('metadata[userId]')).toBe(USER_ID);
+        expect(sentParams.get('payment_intent_data[metadata][userId]')).toBe(USER_ID);
+      } finally {
+        globalThis.fetch = originalFetch;
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('getServiceRoleClient throws in production when SUPABASE_SERVICE_ROLE_KEY is missing', () => {
+      try {
+        setServiceRoleClientForTesting(null);
+        vi.stubEnv('NODE_ENV', 'production');
+        vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
+        expect(() => getServiceRoleClient()).toThrow(
+          'Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY'
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 
