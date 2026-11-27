@@ -46,3 +46,4 @@
 2026-11-27: T-033 wired ImportResumeDialog to T-020 signed-URL upload + T-025 async 202 polling and upgraded ImportReviewModal for nullable ResumeImportDraft, EXCEEDS_LENGTH_LIMIT, UNSLOTTED_CONTENT, and pre-save ResumeSchema validation.
 2026-11-27: T-034 enforced 1-free-export / active-pass entitlement gate on /api/pdf/export (recording usage_events only after ATS lint passes), propagated payment_intent_data[metadata][userId] in Stripe Checkout for refund/dispute revocation, and added production fail-fast for missing SUPABASE_SERVICE_ROLE_KEY.
 2026-11-27: T-035 added single-column Projects section to lib/pdf/templates/standard.tsx between Experience and Education for parity with classic.tsx and ATS lint order.
+2026-11-27: T-036 replaced local regex JD extraction in /api/jd/analyze with LlmProvider (GeminiProvider + BLUEPRINT §6.2 prompt), provider/model-scoped SHA-256 cache key, cache-miss quotas/rate limits, and usage_events telemetry.
